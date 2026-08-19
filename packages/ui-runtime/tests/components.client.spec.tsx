@@ -87,7 +87,7 @@ function explorer(snapshot: RuntimeSourceSnapshot = { data: DATA, loading: false
     t,
   } as RuntimeExplorerProps
   const view = render(<RuntimeExplorer {...props} />)
-  return { store, onVisibilityChange, onRefresh, view }
+  return { store, onVisibilityChange, onRefresh, props, view }
 }
 
 describe('RuntimeAction', () => {
@@ -288,6 +288,29 @@ describe('RuntimeExplorer', () => {
     expect(viewport.hasAttribute('data-panning')).toBe(false)
     fireEvent.click(node)
     expect(b.store.getSnapshot().selection).toEqual({ kind: 'node', id: 'provider' })
+  })
+
+  it('preserves the panned viewport when a live snapshot refreshes the graph objects', () => {
+    const b = explorer()
+    const viewport = screen.getByLabelText(en.panCanvas) as HTMLDivElement
+    viewport.scrollLeft = 140
+    viewport.scrollTop = 320
+    const refreshed: RuntimeExplorerSnapshot = {
+      ...DATA,
+      observedAt: DATA.observedAt + DATA.refreshIntervalMs,
+      graph: {
+        nodes: DATA.graph.nodes.map(node => ({ ...node })),
+        edges: DATA.graph.edges.map(edge => ({ ...edge })),
+      },
+    }
+
+    b.view.rerender(<RuntimeExplorer
+      {...b.props}
+      useRuntime={sourceHook({ data: refreshed, loading: false, error: undefined })}
+    />)
+
+    expect(viewport.scrollLeft).toBe(140)
+    expect(viewport.scrollTop).toBe(320)
   })
 
   it('shows loading and retryable failure states without exposing transport details', () => {

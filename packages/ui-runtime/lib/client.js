@@ -26,12 +26,12 @@ window.__ModuleLoader__.load({
 			enumerable: true
 		}) : target, mod));
 		//#endregion
-		let react_jsx_runtime = require("react/jsx-runtime");
 		let react = require("react");
 		react = __toESM(react, 1);
 		let _deepseek_ai_dsh_client_ui_primitives = require("@deepseek-ai/dsh-client-ui-primitives");
+		let react_jsx_runtime = require("react/jsx-runtime");
 		let _deepseek_ai_dsh_client_runtime_client = require("@deepseek-ai/dsh-client-runtime/client");
-		//#region lib/types/client/locales.js
+		//#region src/client/locales.ts
 		/** Product copy for dsh-runtime. */
 		/** Simplified Chinese dictionary and key source of truth. */
 		const zh = {
@@ -302,7 +302,7 @@ window.__ModuleLoader__.load({
 			"zoomControls": "N45fHq_zoomControls"
 		};
 		//#endregion
-		//#region lib/types/client/RuntimeAction.js
+		//#region src/client/RuntimeAction.tsx
 		/** Sidebar footer action that opens dsh-runtime without adding a floating button. */
 		/** Render the sidebar row/rail entry and publish the measured sidebar edge. */
 		function RuntimeAction({ wide, useStore, actions, onVisibilityChange, t }) {
@@ -328,14 +328,14 @@ window.__ModuleLoader__.load({
 				actions.setOpen(next);
 				onVisibilityChange(next);
 			};
-			return (0, react_jsx_runtime.jsx)("div", {
+			return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
 				ref: root,
 				className: clsx(RuntimeExplorer_module_css_default.sidebarAction, !wide && RuntimeExplorer_module_css_default.sidebarRail),
-				children: (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.Tooltip, {
+				children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.Tooltip, {
 					label: t("open"),
 					delayMs: 500,
 					disabled: wide,
-					children: (0, react_jsx_runtime.jsxs)("button", {
+					children: /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("button", {
 						type: "button",
 						className: RuntimeExplorer_module_css_default.sidebarButton,
 						"data-active": open || void 0,
@@ -343,9 +343,9 @@ window.__ModuleLoader__.load({
 						"aria-expanded": open,
 						onClick: toggle,
 						children: [
-							(0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconBranchOutline16, { size: wide ? 16 : 18 }),
-							wide && (0, react_jsx_runtime.jsx)("span", { children: t("open") }),
-							wide && (0, react_jsx_runtime.jsx)("i", {
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconBranchOutline16, { size: wide ? 16 : 18 }),
+							wide && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", { children: t("open") }),
+							wide && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("i", {
 								className: RuntimeExplorer_module_css_default.liveDot,
 								"aria-hidden": true
 							})
@@ -455,8 +455,7 @@ window.__ModuleLoader__.load({
 		}
 		const ForwardRef = /*#__PURE__*/ react.forwardRef(MagnifyingGlassPlusIcon);
 		//#endregion
-		//#region lib/types/client/graph.js
-		/** Deterministic provider-left graph layout for the runtime SVG. */
+		//#region src/client/graph.ts
 		const NODE_WIDTH = 210;
 		const NODE_HEIGHT = 72;
 		const COLUMN_GAP = 92;
@@ -654,8 +653,7 @@ window.__ModuleLoader__.load({
 			};
 		}
 		//#endregion
-		//#region lib/types/client/trace.js
-		/** Session and Agent Turn projections over the bounded runtime event window. */
+		//#region src/client/trace.ts
 		/**
 		* Build the stable selection key for one Session-owned Agent Turn.
 		* @param sessionId - Opaque Session id from the trace event.
@@ -783,7 +781,7 @@ window.__ModuleLoader__.load({
 			});
 		}
 		//#endregion
-		//#region lib/types/client/RuntimeExplorer.js
+		//#region src/client/RuntimeExplorer.tsx
 		/** Runtime graph, request trace, filters, and metadata inspector. */
 		const STATUS_LABELS = {
 			pending: "pending",
@@ -850,13 +848,13 @@ window.__ModuleLoader__.load({
 			return edges.filter((edge) => ids.has(edge.source) && ids.has(edge.target));
 		}
 		function MetadataList({ values, empty }) {
-			if (values.length === 0) return (0, react_jsx_runtime.jsx)("span", {
+			if (values.length === 0) return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
 				className: RuntimeExplorer_module_css_default.emptyValue,
 				children: empty
 			});
-			return (0, react_jsx_runtime.jsx)("div", {
+			return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
 				className: RuntimeExplorer_module_css_default.chips,
-				children: values.map((value) => (0, react_jsx_runtime.jsx)("code", { children: value }, value))
+				children: values.map((value) => /* @__PURE__ */ (0, react_jsx_runtime.jsx)("code", { children: value }, value))
 			});
 		}
 		function GraphView({ nodes, edges, summary, totalNodes, selectedId, selectedLabel, onSelect, onClearSelection, empty, graphLabel, phaseLabel, t }) {
@@ -875,11 +873,13 @@ window.__ModuleLoader__.load({
 				selectedId
 			]);
 			const scroller = (0, react.useRef)(null);
+			const currentLayout = (0, react.useRef)(layout);
+			currentLayout.current = layout;
 			const pan = (0, react.useRef)();
 			(0, react.useLayoutEffect)(() => {
 				const viewport = scroller.current;
 				if (viewport === null) return;
-				const selected = selectedId === void 0 ? void 0 : layout.byId.get(selectedId);
+				const selected = selectedId === void 0 ? void 0 : currentLayout.current.byId.get(selectedId);
 				if (selected === void 0 || viewport.clientWidth === 0 || viewport.clientHeight === 0) {
 					viewport.scrollLeft = 0;
 					viewport.scrollTop = 0;
@@ -890,7 +890,6 @@ window.__ModuleLoader__.load({
 				viewport.scrollTop = Math.max(0, (selected.y + 72 / 2) * scale - viewport.clientHeight / 2);
 			}, [
 				fitRequest,
-				layout,
 				selectedId,
 				zoomIndex
 			]);
@@ -966,48 +965,48 @@ window.__ModuleLoader__.load({
 					"failed"
 				]
 			];
-			return (0, react_jsx_runtime.jsxs)("div", {
+			return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 				className: RuntimeExplorer_module_css_default.graphView,
 				children: [
-					(0, react_jsx_runtime.jsx)("dl", {
+					/* @__PURE__ */ (0, react_jsx_runtime.jsx)("dl", {
 						className: RuntimeExplorer_module_css_default.graphSummary,
 						"aria-label": t("pluginSummary"),
-						children: summaryItems.map(([label, value, state]) => (0, react_jsx_runtime.jsxs)("div", {
+						children: summaryItems.map(([label, value, state]) => /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 							"data-state": state,
-							children: [(0, react_jsx_runtime.jsx)("dt", { children: t(label) }), (0, react_jsx_runtime.jsx)("dd", { children: value })]
+							children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("dt", { children: t(label) }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("dd", { children: value })]
 						}, label))
 					}),
-					selectedId !== void 0 && selectedLabel !== void 0 && (0, react_jsx_runtime.jsxs)("div", {
+					selectedId !== void 0 && selectedLabel !== void 0 && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 						className: RuntimeExplorer_module_css_default.focusBar,
 						role: "status",
 						"aria-live": "polite",
 						children: [
-							(0, react_jsx_runtime.jsxs)("span", {
+							/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", {
 								className: RuntimeExplorer_module_css_default.focusIdentity,
-								children: [(0, react_jsx_runtime.jsx)("span", { children: t("focusedNode") }), (0, react_jsx_runtime.jsx)("strong", { children: selectedLabel })]
+								children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", { children: t("focusedNode") }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("strong", { children: selectedLabel })]
 							}),
-							(0, react_jsx_runtime.jsxs)("span", {
+							/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", {
 								className: RuntimeExplorer_module_css_default.focusCount,
 								children: [
 									t("relatedPlugins"),
 									" ",
-									(0, react_jsx_runtime.jsx)("strong", { children: focus.nodes.length }),
+									/* @__PURE__ */ (0, react_jsx_runtime.jsx)("strong", { children: focus.nodes.length }),
 									" / ",
 									totalNodes
 								]
 							}),
-							(0, react_jsx_runtime.jsxs)("span", {
+							/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", {
 								className: RuntimeExplorer_module_css_default.relationLegend,
 								"aria-label": t("dependencyDirection"),
-								children: [(0, react_jsx_runtime.jsxs)("span", {
+								children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", {
 									"data-relation": "dependency",
-									children: [(0, react_jsx_runtime.jsx)("i", { "aria-hidden": true }), t("dependencies")]
-								}), (0, react_jsx_runtime.jsxs)("span", {
+									children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("i", { "aria-hidden": true }), t("dependencies")]
+								}), /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", {
 									"data-relation": "dependant",
-									children: [(0, react_jsx_runtime.jsx)("i", { "aria-hidden": true }), t("dependants")]
+									children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("i", { "aria-hidden": true }), t("dependants")]
 								})]
 							}),
-							(0, react_jsx_runtime.jsx)("button", {
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
 								type: "button",
 								className: RuntimeExplorer_module_css_default.showAll,
 								onClick: onClearSelection,
@@ -1015,10 +1014,10 @@ window.__ModuleLoader__.load({
 							})
 						]
 					}),
-					nodes.length === 0 ? (0, react_jsx_runtime.jsx)("div", {
+					nodes.length === 0 ? /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
 						className: RuntimeExplorer_module_css_default.emptyState,
 						children: empty
-					}) : (0, react_jsx_runtime.jsx)("div", {
+					}) : /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
 						ref: scroller,
 						className: RuntimeExplorer_module_css_default.graphScroller,
 						"data-panning": panning || void 0,
@@ -1029,13 +1028,13 @@ window.__ModuleLoader__.load({
 						onPointerUp: endPan,
 						onPointerCancel: endPan,
 						onLostPointerCapture: endPan,
-						children: (0, react_jsx_runtime.jsx)("div", {
+						children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
 							className: RuntimeExplorer_module_css_default.graphStage,
 							style: {
 								width: layout.width * scale,
 								height: layout.height * scale
 							},
-							children: (0, react_jsx_runtime.jsxs)("svg", {
+							children: /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("svg", {
 								className: RuntimeExplorer_module_css_default.graph,
 								width: layout.width,
 								height: layout.height,
@@ -1043,7 +1042,7 @@ window.__ModuleLoader__.load({
 								style: { transform: `scale(${scale})` },
 								role: "img",
 								"aria-label": graphLabel,
-								children: [(0, react_jsx_runtime.jsx)("g", {
+								children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("g", {
 									className: RuntimeExplorer_module_css_default.edges,
 									children: focus.edges.map((edge) => {
 										const consumer = layout.byId.get(edge.source);
@@ -1053,18 +1052,18 @@ window.__ModuleLoader__.load({
 										const x2 = consumer.x;
 										const y2 = consumer.y + 72 / 2;
 										const bend = Math.max(32, (x2 - x1) / 2);
-										return (0, react_jsx_runtime.jsx)("path", {
+										return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("path", {
 											d: `M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`,
 											"data-relation": relations.edges.get(`${edge.source}:${edge.target}`),
-											children: (0, react_jsx_runtime.jsx)("title", { children: edge.services.join(", ") })
+											children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)("title", { children: edge.services.join(", ") })
 										}, `${edge.source}:${edge.target}`);
 									})
-								}), layout.positions.map(({ node, x, y }) => (0, react_jsx_runtime.jsx)("foreignObject", {
+								}), layout.positions.map(({ node, x, y }) => /* @__PURE__ */ (0, react_jsx_runtime.jsx)("foreignObject", {
 									x,
 									y,
 									width: 210,
 									height: 72,
-									children: (0, react_jsx_runtime.jsxs)("button", {
+									children: /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("button", {
 										type: "button",
 										className: RuntimeExplorer_module_css_default.graphNode,
 										"data-phase": statusKey(node.phase),
@@ -1073,80 +1072,80 @@ window.__ModuleLoader__.load({
 										onClick: () => {
 											onSelect(node.id);
 										},
-										children: [(0, react_jsx_runtime.jsx)("span", {
+										children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
 											className: RuntimeExplorer_module_css_default.nodeIcon,
-											children: (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconCordisPluginOutline14, { size: 16 })
-										}), (0, react_jsx_runtime.jsxs)("span", {
+											children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconCordisPluginOutline14, { size: 16 })
+										}), /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", {
 											className: RuntimeExplorer_module_css_default.nodeCopy,
-											children: [(0, react_jsx_runtime.jsx)("strong", { children: node.label }), (0, react_jsx_runtime.jsxs)("small", { children: [(0, react_jsx_runtime.jsx)("i", { "aria-hidden": true }), phaseLabel(node.phase)] })]
+											children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("strong", { children: node.label }), /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("small", { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("i", { "aria-hidden": true }), phaseLabel(node.phase)] })]
 										})]
 									})
 								}, node.id))]
 							})
 						})
 					}),
-					nodes.length > 0 && (0, react_jsx_runtime.jsxs)("div", {
+					nodes.length > 0 && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 						className: RuntimeExplorer_module_css_default.zoomControls,
 						role: "group",
 						"aria-label": t("zoomControls"),
 						children: [
-							(0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.Tooltip, {
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.Tooltip, {
 								label: t("zoomOut"),
 								side: "top",
 								delayMs: 400,
-								children: (0, react_jsx_runtime.jsx)("button", {
+								children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
 									type: "button",
 									"aria-label": t("zoomOut"),
 									disabled: zoomIndex === 0,
 									onClick: () => {
 										setZoomIndex((current) => Math.max(0, current - 1));
 									},
-									children: (0, react_jsx_runtime.jsx)(ForwardRef$1, {
+									children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)(ForwardRef$1, {
 										"aria-hidden": "true",
 										width: 18,
 										height: 18
 									})
 								})
 							}),
-							(0, react_jsx_runtime.jsxs)("output", {
+							/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("output", {
 								"aria-label": t("zoomLevel"),
 								"aria-live": "polite",
 								children: [Math.round(scale * 100), "%"]
 							}),
-							(0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.Tooltip, {
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.Tooltip, {
 								label: t("zoomIn"),
 								side: "top",
 								delayMs: 400,
-								children: (0, react_jsx_runtime.jsx)("button", {
+								children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
 									type: "button",
 									"aria-label": t("zoomIn"),
 									disabled: zoomIndex === GRAPH_ZOOM_LEVELS.length - 1,
 									onClick: () => {
 										setZoomIndex((current) => Math.min(GRAPH_ZOOM_LEVELS.length - 1, current + 1));
 									},
-									children: (0, react_jsx_runtime.jsx)(ForwardRef, {
+									children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)(ForwardRef, {
 										"aria-hidden": "true",
 										width: 18,
 										height: 18
 									})
 								})
 							}),
-							(0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.Tooltip, {
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.Tooltip, {
 								label: t("fitView"),
 								side: "top",
 								delayMs: 400,
-								children: (0, react_jsx_runtime.jsx)("button", {
+								children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
 									type: "button",
 									"aria-label": t("fitView"),
 									onClick: fitView,
-									children: (0, react_jsx_runtime.jsx)(ForwardRef$3, {
+									children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)(ForwardRef$3, {
 										"aria-hidden": "true",
 										width: 18,
 										height: 18
 									})
 								})
 							}),
-							(0, react_jsx_runtime.jsx)("button", {
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
 								type: "button",
 								onClick: resetZoom,
 								children: t("resetZoom")
@@ -1157,76 +1156,76 @@ window.__ModuleLoader__.load({
 			});
 		}
 		function TraceTimeline({ turn, events, selectedId, onSelect, onBack, empty, laneLabel, timeLabel, t }) {
-			return (0, react_jsx_runtime.jsxs)("div", {
+			return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 				className: RuntimeExplorer_module_css_default.traceDetail,
-				children: [(0, react_jsx_runtime.jsxs)("header", {
+				children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("header", {
 					className: RuntimeExplorer_module_css_default.traceDetailHeader,
 					children: [
-						(0, react_jsx_runtime.jsxs)("button", {
+						/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("button", {
 							type: "button",
 							className: RuntimeExplorer_module_css_default.traceBack,
 							onClick: onBack,
-							children: [(0, react_jsx_runtime.jsx)(ForwardRef$4, {
+							children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)(ForwardRef$4, {
 								"aria-hidden": "true",
 								width: 16,
 								height: 16
 							}), t("backToTurns")]
 						}),
-						(0, react_jsx_runtime.jsxs)("div", {
+						/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 							className: RuntimeExplorer_module_css_default.traceDetailIdentity,
 							children: [
-								(0, react_jsx_runtime.jsx)("code", {
+								/* @__PURE__ */ (0, react_jsx_runtime.jsx)("code", {
 									title: turn.sessionId,
 									children: shortSessionId(turn.sessionId)
 								}),
-								(0, react_jsx_runtime.jsx)("span", {
+								/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
 									"aria-hidden": "true",
 									children: "/"
 								}),
-								(0, react_jsx_runtime.jsxs)("strong", { children: [
+								/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("strong", { children: [
 									t("turn"),
 									" #",
 									turn.turn
 								] }),
-								(0, react_jsx_runtime.jsx)("span", {
+								/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
 									className: RuntimeExplorer_module_css_default.turnStatus,
 									"data-status": turn.status,
 									children: t(TURN_STATUS_LABELS[turn.status])
 								})
 							]
 						}),
-						(0, react_jsx_runtime.jsxs)("dl", {
+						/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("dl", {
 							className: RuntimeExplorer_module_css_default.turnMetrics,
 							children: [
-								(0, react_jsx_runtime.jsxs)("div", { children: [(0, react_jsx_runtime.jsx)("dt", { children: t("duration") }), (0, react_jsx_runtime.jsx)("dd", { children: formatDuration(turn.durationMs) })] }),
-								(0, react_jsx_runtime.jsxs)("div", { children: [(0, react_jsx_runtime.jsx)("dt", { children: t("events") }), (0, react_jsx_runtime.jsx)("dd", { children: turn.eventCount })] }),
-								(0, react_jsx_runtime.jsxs)("div", { children: [(0, react_jsx_runtime.jsx)("dt", { children: t("steps") }), (0, react_jsx_runtime.jsx)("dd", { children: turn.stepCount })] }),
-								(0, react_jsx_runtime.jsxs)("div", { children: [(0, react_jsx_runtime.jsx)("dt", { children: t("toolCalls") }), (0, react_jsx_runtime.jsx)("dd", { children: turn.toolCallCount })] })
+								/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("dt", { children: t("duration") }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("dd", { children: formatDuration(turn.durationMs) })] }),
+								/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("dt", { children: t("events") }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("dd", { children: turn.eventCount })] }),
+								/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("dt", { children: t("steps") }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("dd", { children: turn.stepCount })] }),
+								/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("dt", { children: t("toolCalls") }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("dd", { children: turn.toolCallCount })] })
 							]
 						})
 					]
-				}), events.length === 0 ? (0, react_jsx_runtime.jsx)("div", {
+				}), events.length === 0 ? /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
 					className: RuntimeExplorer_module_css_default.emptyState,
 					children: empty
-				}) : (0, react_jsx_runtime.jsx)("div", {
+				}) : /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
 					className: RuntimeExplorer_module_css_default.traceScroller,
-					children: (0, react_jsx_runtime.jsxs)("div", {
+					children: /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 						className: RuntimeExplorer_module_css_default.traceGrid,
 						children: [
-							(0, react_jsx_runtime.jsx)("div", {
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
 								className: RuntimeExplorer_module_css_default.traceCorner,
 								children: timeLabel
 							}),
-							Object.keys(LANE_LABELS).map((lane) => (0, react_jsx_runtime.jsx)("div", {
+							Object.keys(LANE_LABELS).map((lane) => /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
 								className: RuntimeExplorer_module_css_default.traceLane,
 								children: laneLabel(lane)
 							}, lane)),
-							events.map((event) => (0, react_jsx_runtime.jsxs)("div", {
+							events.map((event) => /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 								className: RuntimeExplorer_module_css_default.traceRow,
-								children: [(0, react_jsx_runtime.jsx)("time", {
+								children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("time", {
 									dateTime: new Date(event.time).toISOString(),
 									children: new Date(event.time).toLocaleTimeString([], { hour12: false })
-								}), (0, react_jsx_runtime.jsxs)("button", {
+								}), /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("button", {
 									type: "button",
 									className: RuntimeExplorer_module_css_default.traceEvent,
 									"data-lane": event.lane,
@@ -1234,7 +1233,7 @@ window.__ModuleLoader__.load({
 									onClick: () => {
 										onSelect(event.id);
 									},
-									children: [(0, react_jsx_runtime.jsx)("span", { children: event.type }), (0, react_jsx_runtime.jsx)("small", { children: event.name ?? `#${event.seq}` })]
+									children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", { children: event.type }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("small", { children: event.name ?? `#${event.seq}` })]
 								})]
 							}, event.id))
 						]
@@ -1244,29 +1243,29 @@ window.__ModuleLoader__.load({
 		}
 		function TraceDirectory({ sessions, onSelect, empty, t }) {
 			const turnCount = sessions.reduce((count, session) => count + session.turns.length, 0);
-			if (turnCount === 0) return (0, react_jsx_runtime.jsx)("div", {
+			if (turnCount === 0) return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
 				className: RuntimeExplorer_module_css_default.emptyState,
 				children: empty
 			});
 			const runningCount = sessions.reduce((count, session) => count + session.turns.filter((turn) => turn.status === "running").length, 0);
-			return (0, react_jsx_runtime.jsxs)("div", {
+			return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 				className: RuntimeExplorer_module_css_default.traceDirectory,
-				children: [(0, react_jsx_runtime.jsxs)("dl", {
+				children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("dl", {
 					className: RuntimeExplorer_module_css_default.traceSummary,
 					"aria-label": t("traceSummary"),
 					children: [
-						(0, react_jsx_runtime.jsxs)("div", { children: [(0, react_jsx_runtime.jsx)("dt", { children: t("sessions") }), (0, react_jsx_runtime.jsx)("dd", { children: sessions.length })] }),
-						(0, react_jsx_runtime.jsxs)("div", { children: [(0, react_jsx_runtime.jsx)("dt", { children: t("agentTurns") }), (0, react_jsx_runtime.jsx)("dd", { children: turnCount })] }),
-						(0, react_jsx_runtime.jsxs)("div", { children: [(0, react_jsx_runtime.jsx)("dt", { children: t("runningTurns") }), (0, react_jsx_runtime.jsx)("dd", { children: runningCount })] })
+						/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("dt", { children: t("sessions") }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("dd", { children: sessions.length })] }),
+						/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("dt", { children: t("agentTurns") }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("dd", { children: turnCount })] }),
+						/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("dt", { children: t("runningTurns") }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("dd", { children: runningCount })] })
 					]
-				}), (0, react_jsx_runtime.jsx)("div", {
+				}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
 					className: RuntimeExplorer_module_css_default.traceSessions,
-					children: sessions.map((session) => (0, react_jsx_runtime.jsxs)("section", {
+					children: sessions.map((session) => /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("section", {
 						className: RuntimeExplorer_module_css_default.traceSession,
-						children: [(0, react_jsx_runtime.jsxs)("header", { children: [(0, react_jsx_runtime.jsxs)("div", { children: [(0, react_jsx_runtime.jsx)("span", { children: t("session") }), (0, react_jsx_runtime.jsx)("code", {
+						children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("header", { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", { children: t("session") }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("code", {
 							title: session.sessionId,
 							children: shortSessionId(session.sessionId)
-						})] }), (0, react_jsx_runtime.jsxs)("small", { children: [
+						})] }), /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("small", { children: [
 							session.turns.length,
 							" ",
 							t("turns"),
@@ -1274,9 +1273,9 @@ window.__ModuleLoader__.load({
 							session.eventCount,
 							" ",
 							t("events")
-						] })] }), (0, react_jsx_runtime.jsxs)("div", {
+						] })] }), /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 							className: RuntimeExplorer_module_css_default.turnList,
-							children: [session.turns.map((turn) => (0, react_jsx_runtime.jsxs)("button", {
+							children: [session.turns.map((turn) => /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("button", {
 								type: "button",
 								className: RuntimeExplorer_module_css_default.turnRow,
 								"aria-label": `${t("turn")} ${turn.turn}, ${t(TURN_STATUS_LABELS[turn.status])}`,
@@ -1284,38 +1283,38 @@ window.__ModuleLoader__.load({
 									onSelect(turn.key);
 								},
 								children: [
-									(0, react_jsx_runtime.jsxs)("div", {
+									/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 										className: RuntimeExplorer_module_css_default.turnIdentity,
-										children: [(0, react_jsx_runtime.jsxs)("strong", { children: [
+										children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("strong", { children: [
 											t("turn"),
 											" #",
 											turn.turn
-										] }), (0, react_jsx_runtime.jsx)("time", {
+										] }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("time", {
 											dateTime: new Date(turn.startedAt).toISOString(),
 											children: new Date(turn.startedAt).toLocaleTimeString([], { hour12: false })
 										})]
 									}),
-									(0, react_jsx_runtime.jsx)("span", {
+									/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
 										className: RuntimeExplorer_module_css_default.turnStatus,
 										"data-status": turn.status,
 										children: t(TURN_STATUS_LABELS[turn.status])
 									}),
-									(0, react_jsx_runtime.jsxs)("dl", {
+									/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("dl", {
 										className: RuntimeExplorer_module_css_default.turnMetrics,
 										children: [
-											(0, react_jsx_runtime.jsxs)("div", { children: [(0, react_jsx_runtime.jsx)("dt", { children: t("duration") }), (0, react_jsx_runtime.jsx)("dd", { children: formatDuration(turn.durationMs) })] }),
-											(0, react_jsx_runtime.jsxs)("div", { children: [(0, react_jsx_runtime.jsx)("dt", { children: t("events") }), (0, react_jsx_runtime.jsx)("dd", { children: turn.eventCount })] }),
-											(0, react_jsx_runtime.jsxs)("div", { children: [(0, react_jsx_runtime.jsx)("dt", { children: t("steps") }), (0, react_jsx_runtime.jsx)("dd", { children: turn.stepCount })] }),
-											(0, react_jsx_runtime.jsxs)("div", { children: [(0, react_jsx_runtime.jsx)("dt", { children: t("toolCalls") }), (0, react_jsx_runtime.jsx)("dd", { children: turn.toolCallCount })] })
+											/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("dt", { children: t("duration") }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("dd", { children: formatDuration(turn.durationMs) })] }),
+											/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("dt", { children: t("events") }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("dd", { children: turn.eventCount })] }),
+											/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("dt", { children: t("steps") }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("dd", { children: turn.stepCount })] }),
+											/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("dt", { children: t("toolCalls") }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("dd", { children: turn.toolCallCount })] })
 										]
 									}),
-									(0, react_jsx_runtime.jsx)(ForwardRef$2, {
+									/* @__PURE__ */ (0, react_jsx_runtime.jsx)(ForwardRef$2, {
 										"aria-hidden": "true",
 										width: 17,
 										height: 17
 									})
 								]
-							}, turn.key)), session.sessionEvents.length > 0 && (0, react_jsx_runtime.jsxs)("p", {
+							}, turn.key)), session.sessionEvents.length > 0 && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("p", {
 								className: RuntimeExplorer_module_css_default.sessionEvents,
 								children: [
 									t("sessionEvents"),
@@ -1334,47 +1333,47 @@ window.__ModuleLoader__.load({
 				["entry", node.entryId],
 				["status", t(STATUS_LABELS[statusKey(node.phase)])]
 			];
-			return (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [
-				(0, react_jsx_runtime.jsxs)("div", {
+			return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [
+				/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 					className: RuntimeExplorer_module_css_default.inspectorTitle,
-					children: [(0, react_jsx_runtime.jsx)("span", {
+					children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
 						className: RuntimeExplorer_module_css_default.inspectorIcon,
-						children: (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconCordisPluginOutline14, { size: 18 })
-					}), (0, react_jsx_runtime.jsxs)("div", { children: [(0, react_jsx_runtime.jsx)("strong", { children: node.label }), (0, react_jsx_runtime.jsx)("small", { children: t("selectedPlugin") })] })]
+						children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconCordisPluginOutline14, { size: 18 })
+					}), /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("strong", { children: node.label }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("small", { children: t("selectedPlugin") })] })]
 				}),
-				(0, react_jsx_runtime.jsx)("dl", {
+				/* @__PURE__ */ (0, react_jsx_runtime.jsx)("dl", {
 					className: RuntimeExplorer_module_css_default.metadata,
-					children: rows.map(([label, value]) => (0, react_jsx_runtime.jsxs)("div", { children: [(0, react_jsx_runtime.jsx)("dt", { children: t(label) }), (0, react_jsx_runtime.jsx)("dd", { children: value })] }, label))
+					children: rows.map(([label, value]) => /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("dt", { children: t(label) }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("dd", { children: value })] }, label))
 				}),
-				(0, react_jsx_runtime.jsxs)("section", {
+				/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("section", {
 					className: RuntimeExplorer_module_css_default.inspectorSection,
-					children: [(0, react_jsx_runtime.jsx)("h3", { children: t("provides") }), (0, react_jsx_runtime.jsx)(MetadataList, {
+					children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("h3", { children: t("provides") }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)(MetadataList, {
 						values: node.provides,
 						empty: t("noItems")
 					})]
 				}),
-				(0, react_jsx_runtime.jsxs)("section", {
+				/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("section", {
 					className: RuntimeExplorer_module_css_default.inspectorSection,
-					children: [(0, react_jsx_runtime.jsx)("h3", { children: t("injects") }), (0, react_jsx_runtime.jsx)(MetadataList, {
+					children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("h3", { children: t("injects") }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)(MetadataList, {
 						values: node.injects,
 						empty: t("noItems")
 					})]
 				}),
-				node.missing.length > 0 && (0, react_jsx_runtime.jsxs)("section", {
+				node.missing.length > 0 && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("section", {
 					className: RuntimeExplorer_module_css_default.inspectorSection,
 					"data-warning": true,
-					children: [(0, react_jsx_runtime.jsx)("h3", { children: t("missing") }), (0, react_jsx_runtime.jsx)(MetadataList, {
+					children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("h3", { children: t("missing") }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)(MetadataList, {
 						values: node.missing,
 						empty: t("noItems")
 					})]
 				}),
-				(0, react_jsx_runtime.jsxs)("section", {
+				/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("section", {
 					className: RuntimeExplorer_module_css_default.inspectorSection,
-					children: [(0, react_jsx_runtime.jsxs)("h3", { children: [
+					children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("h3", { children: [
 						t("effects"),
 						" ",
-						(0, react_jsx_runtime.jsx)("span", { children: node.effectCount })
-					] }), (0, react_jsx_runtime.jsx)(MetadataList, {
+						/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", { children: node.effectCount })
+					] }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)(MetadataList, {
 						values: node.effects,
 						empty: t("noItems")
 					})]
@@ -1393,19 +1392,19 @@ window.__ModuleLoader__.load({
 				["tool", event.name],
 				["outcome", event.outcome]
 			];
-			return (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [
-				(0, react_jsx_runtime.jsxs)("div", {
+			return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [
+				/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 					className: RuntimeExplorer_module_css_default.inspectorTitle,
-					children: [(0, react_jsx_runtime.jsx)("span", {
+					children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
 						className: RuntimeExplorer_module_css_default.inspectorIcon,
-						children: (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconDataOutline16, { size: 18 })
-					}), (0, react_jsx_runtime.jsxs)("div", { children: [(0, react_jsx_runtime.jsx)("strong", { children: event.type }), (0, react_jsx_runtime.jsx)("small", { children: t("selectedEvent") })] })]
+						children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconDataOutline16, { size: 18 })
+					}), /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("strong", { children: event.type }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("small", { children: t("selectedEvent") })] })]
 				}),
-				(0, react_jsx_runtime.jsx)("dl", {
+				/* @__PURE__ */ (0, react_jsx_runtime.jsx)("dl", {
 					className: RuntimeExplorer_module_css_default.metadata,
-					children: rows.filter(([, value]) => value !== void 0).map(([label, value]) => (0, react_jsx_runtime.jsxs)("div", { children: [(0, react_jsx_runtime.jsx)("dt", { children: t(label) }), (0, react_jsx_runtime.jsx)("dd", { children: String(value) })] }, label))
+					children: rows.filter(([, value]) => value !== void 0).map(([label, value]) => /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("dt", { children: t(label) }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("dd", { children: String(value) })] }, label))
 				}),
-				(0, react_jsx_runtime.jsx)("p", {
+				/* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", {
 					className: RuntimeExplorer_module_css_default.privacy,
 					children: t("privacy")
 				})
@@ -1437,85 +1436,85 @@ window.__ModuleLoader__.load({
 				actions.setOpen(false);
 				onVisibilityChange(false);
 			};
-			return (0, react_jsx_runtime.jsxs)("section", {
+			return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("section", {
 				className: RuntimeExplorer_module_css_default.surface,
 				style: { left: state.sidebarOffset },
 				"aria-label": t("title"),
 				children: [
-					(0, react_jsx_runtime.jsxs)("header", {
+					/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("header", {
 						className: RuntimeExplorer_module_css_default.header,
 						children: [
-							(0, react_jsx_runtime.jsx)("div", {
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
 								className: RuntimeExplorer_module_css_default.brandIcon,
-								children: (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconBranchOutline16, { size: 20 })
+								children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconBranchOutline16, { size: 20 })
 							}),
-							(0, react_jsx_runtime.jsxs)("div", {
+							/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 								className: RuntimeExplorer_module_css_default.heading,
-								children: [(0, react_jsx_runtime.jsx)("h1", { children: t("title") }), (0, react_jsx_runtime.jsx)("p", { children: t("subtitle") })]
+								children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("h1", { children: t("title") }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", { children: t("subtitle") })]
 							}),
-							(0, react_jsx_runtime.jsxs)("span", {
+							/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", {
 								className: RuntimeExplorer_module_css_default.liveBadge,
-								children: [(0, react_jsx_runtime.jsx)("i", { "aria-hidden": true }), t("live")]
+								children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("i", { "aria-hidden": true }), t("live")]
 							}),
-							(0, react_jsx_runtime.jsxs)("span", {
+							/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", {
 								className: RuntimeExplorer_module_css_default.profileBadge,
 								"aria-label": `${t("currentProfile")}: ${data?.profile ?? t("unavailable")}`,
-								children: [(0, react_jsx_runtime.jsx)("span", { children: t("profile") }), (0, react_jsx_runtime.jsx)("code", { children: data?.profile ?? "—" })]
+								children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", { children: t("profile") }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("code", { children: data?.profile ?? "—" })]
 							}),
-							(0, react_jsx_runtime.jsx)("span", {
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
 								className: RuntimeExplorer_module_css_default.updated,
 								children: t("updated")
 							}),
-							(0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.Tooltip, {
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.Tooltip, {
 								label: t("refresh"),
 								side: "bottom",
 								delayMs: 400,
-								children: (0, react_jsx_runtime.jsx)("button", {
+								children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
 									type: "button",
 									className: RuntimeExplorer_module_css_default.iconButton,
 									"aria-label": t("refresh"),
 									onClick: onRefresh,
-									children: (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconRefreshOutline16, { size: 16 })
+									children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconRefreshOutline16, { size: 16 })
 								})
 							}),
-							(0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.Tooltip, {
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.Tooltip, {
 								label: t("close"),
 								side: "bottom",
 								delayMs: 400,
-								children: (0, react_jsx_runtime.jsx)("button", {
+								children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
 									type: "button",
 									className: RuntimeExplorer_module_css_default.iconButton,
 									"aria-label": t("close"),
 									onClick: close,
-									children: (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconCloseOutline16, { size: 16 })
+									children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconCloseOutline16, { size: 16 })
 								})
 							})
 						]
 					}),
-					(0, react_jsx_runtime.jsxs)("div", {
+					/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 						className: RuntimeExplorer_module_css_default.toolbar,
 						children: [
-							(0, react_jsx_runtime.jsxs)("div", {
+							/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 								className: RuntimeExplorer_module_css_default.tabs,
-								children: [(0, react_jsx_runtime.jsxs)("button", {
+								children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("button", {
 									type: "button",
 									"data-active": state.tab === "graph" || void 0,
 									onClick: () => {
 										actions.setTab("graph");
 									},
-									children: [(0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconBranchOutline16, { size: 15 }), t("graphTab")]
-								}), (0, react_jsx_runtime.jsxs)("button", {
+									children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconBranchOutline16, { size: 15 }), t("graphTab")]
+								}), /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("button", {
 									type: "button",
 									"data-active": state.tab === "trace" || void 0,
 									onClick: () => {
 										actions.setTab("trace");
 									},
-									children: [(0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconDataOutline16, { size: 15 }), t("traceTab")]
+									children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconDataOutline16, { size: 15 }), t("traceTab")]
 								})]
 							}),
-							(0, react_jsx_runtime.jsxs)("label", {
+							/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("label", {
 								className: RuntimeExplorer_module_css_default.search,
-								children: [(0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconSearchOutline16, { size: 16 }), (0, react_jsx_runtime.jsx)("input", {
+								children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconSearchOutline16, { size: 16 }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("input", {
 									value: state.query,
 									placeholder: t(state.tab === "graph" ? "searchGraph" : selectedTurn === void 0 ? "searchTrace" : "searchTurnTrace"),
 									onChange: (event) => {
@@ -1523,41 +1522,41 @@ window.__ModuleLoader__.load({
 									}
 								})]
 							}),
-							state.tab === "graph" && (0, react_jsx_runtime.jsxs)("select", {
+							state.tab === "graph" && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("select", {
 								className: RuntimeExplorer_module_css_default.phaseFilter,
 								"aria-label": t("allStates"),
 								value: state.phase,
 								onChange: (event) => {
 									actions.setPhase(event.target.value);
 								},
-								children: [(0, react_jsx_runtime.jsx)("option", {
+								children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("option", {
 									value: "all",
 									children: t("allStates")
-								}), Object.keys(STATUS_LABELS).map((status) => (0, react_jsx_runtime.jsx)("option", {
+								}), Object.keys(STATUS_LABELS).map((status) => /* @__PURE__ */ (0, react_jsx_runtime.jsx)("option", {
 									value: status,
 									children: t(STATUS_LABELS[status])
 								}, status))]
 							})
 						]
 					}),
-					(0, react_jsx_runtime.jsxs)("div", {
+					/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 						className: clsx(RuntimeExplorer_module_css_default.body, (selectedNode !== void 0 || selectedEvent !== void 0) && RuntimeExplorer_module_css_default.withInspector),
-						children: [(0, react_jsx_runtime.jsxs)("main", {
+						children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("main", {
 							className: RuntimeExplorer_module_css_default.canvas,
 							children: [
-								remote.loading && data === void 0 && (0, react_jsx_runtime.jsx)("div", {
+								remote.loading && data === void 0 && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
 									className: RuntimeExplorer_module_css_default.emptyState,
 									children: t("loadingSnapshot")
 								}),
-								remote.error !== void 0 && data === void 0 && (0, react_jsx_runtime.jsxs)("div", {
+								remote.error !== void 0 && data === void 0 && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 									className: RuntimeExplorer_module_css_default.emptyState,
-									children: [(0, react_jsx_runtime.jsx)("p", { children: t("loadFailed") }), (0, react_jsx_runtime.jsx)("button", {
+									children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", { children: t("loadFailed") }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
 										type: "button",
 										onClick: onRefresh,
 										children: t("retry")
 									})]
 								}),
-								data !== void 0 && state.tab === "graph" && (0, react_jsx_runtime.jsx)(GraphView, {
+								data !== void 0 && state.tab === "graph" && /* @__PURE__ */ (0, react_jsx_runtime.jsx)(GraphView, {
 									nodes: graphNodes,
 									edges: graphEdges,
 									summary: summarizeRuntimeGraph(data.graph.nodes),
@@ -1578,14 +1577,14 @@ window.__ModuleLoader__.load({
 										actions.select(void 0);
 									}
 								}),
-								data !== void 0 && state.tab === "trace" && (selectedTurn === void 0 ? (0, react_jsx_runtime.jsx)(TraceDirectory, {
+								data !== void 0 && state.tab === "trace" && (selectedTurn === void 0 ? /* @__PURE__ */ (0, react_jsx_runtime.jsx)(TraceDirectory, {
 									sessions: visibleTraceSessions,
 									empty: t(query === "" ? "emptyTurns" : "emptyTrace"),
 									t,
 									onSelect: (key) => {
 										actions.selectTraceTurn(key);
 									}
-								}) : (0, react_jsx_runtime.jsx)(TraceTimeline, {
+								}) : /* @__PURE__ */ (0, react_jsx_runtime.jsx)(TraceTimeline, {
 									turn: selectedTurn,
 									events: traceEvents,
 									selectedId: selectedEvent?.id,
@@ -1604,23 +1603,23 @@ window.__ModuleLoader__.load({
 									}
 								}))
 							]
-						}), (selectedNode !== void 0 || selectedEvent !== void 0) && (0, react_jsx_runtime.jsxs)("aside", {
+						}), (selectedNode !== void 0 || selectedEvent !== void 0) && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("aside", {
 							className: RuntimeExplorer_module_css_default.inspector,
 							children: [
-								(0, react_jsx_runtime.jsx)("button", {
+								/* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
 									type: "button",
 									className: RuntimeExplorer_module_css_default.inspectorClose,
 									"aria-label": t("closeInspector"),
 									onClick: () => {
 										actions.select(void 0);
 									},
-									children: (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconCloseOutline16, { size: 16 })
+									children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconCloseOutline16, { size: 16 })
 								}),
-								selectedNode !== void 0 && (0, react_jsx_runtime.jsx)(PluginInspector, {
+								selectedNode !== void 0 && /* @__PURE__ */ (0, react_jsx_runtime.jsx)(PluginInspector, {
 									node: selectedNode,
 									t
 								}),
-								selectedEvent !== void 0 && (0, react_jsx_runtime.jsx)(EventInspector, {
+								selectedEvent !== void 0 && /* @__PURE__ */ (0, react_jsx_runtime.jsx)(EventInspector, {
 									event: selectedEvent,
 									t
 								})
@@ -1631,8 +1630,7 @@ window.__ModuleLoader__.load({
 			});
 		}
 		//#endregion
-		//#region lib/types/client/source.js
-		/** Observable Remote snapshot with single-flight refresh and open-only polling. */
+		//#region src/client/source.ts
 		/**
 		* Build the browser source over the generated Remote call.
 		* @param read - Invoke the mounted runtimeExplorer snapshot Remote.
@@ -1715,7 +1713,7 @@ window.__ModuleLoader__.load({
 			return source;
 		}
 		//#endregion
-		//#region lib/types/client/store.js
+		//#region src/client/store.ts
 		/** Shared viewing state for the sidebar action and frame overlay. */
 		/**
 		* Create the root-scoped store shared by both dsh-runtime slot entries.
@@ -1765,8 +1763,7 @@ window.__ModuleLoader__.load({
 			});
 		}
 		//#endregion
-		//#region lib/types/client/index.js
-		/** dsh-runtime sidebar entry and frame overlay assembly. */
+		//#region src/client/index.ts
 		const NS = "runtime";
 		/** Services required by the Remote source and both slot contributions. */
 		const inject = [

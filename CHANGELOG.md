@@ -7,3 +7,4 @@
 - Add privacy-safe Agent request tracing grouped by Session and Agent Turn.
 - Add five-lane Turn timelines and event metadata inspection.
 - Add Chinese and English product copy.
+- Preserve the user's panned graph viewport across live snapshot refreshes.

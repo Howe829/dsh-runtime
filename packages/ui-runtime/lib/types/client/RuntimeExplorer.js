@@ -75,12 +75,14 @@ function GraphView({ nodes, edges, summary, totalNodes, selectedId, selectedLabe
     const layout = useMemo(() => layoutRuntimeGraph(focus.nodes, focus.edges), [focus.edges, focus.nodes]);
     const relations = useMemo(() => runtimeGraphRelations(focus.nodes, focus.edges, selectedId), [focus.edges, focus.nodes, selectedId]);
     const scroller = useRef(null);
+    const currentLayout = useRef(layout);
+    currentLayout.current = layout;
     const pan = useRef();
     useLayoutEffect(() => {
         const viewport = scroller.current;
         if (viewport === null)
             return;
-        const selected = selectedId === undefined ? undefined : layout.byId.get(selectedId);
+        const selected = selectedId === undefined ? undefined : currentLayout.current.byId.get(selectedId);
         if (selected === undefined || viewport.clientWidth === 0 || viewport.clientHeight === 0) {
             viewport.scrollLeft = 0;
             viewport.scrollTop = 0;
@@ -89,7 +91,7 @@ function GraphView({ nodes, edges, summary, totalNodes, selectedId, selectedLabe
         const scale = GRAPH_ZOOM_LEVELS[zoomIndex];
         viewport.scrollLeft = Math.max(0, (selected.x + RUNTIME_NODE_WIDTH / 2) * scale - viewport.clientWidth / 2);
         viewport.scrollTop = Math.max(0, (selected.y + RUNTIME_NODE_HEIGHT / 2) * scale - viewport.clientHeight / 2);
-    }, [fitRequest, layout, selectedId, zoomIndex]);
+    }, [fitRequest, selectedId, zoomIndex]);
     const scale = GRAPH_ZOOM_LEVELS[zoomIndex];
     const startPan = (event) => {
         if (event.button !== 0 || !event.isPrimary)
