@@ -1,0 +1,6 @@
+packages:
+  - packages/*
+
+peerDependencyRules:
+  allowedVersions:
+    typescript: '>=5 <7'

@@ -1,0 +1,7 @@
+# Host runtime snapshot gateway.
+- id: runtime-explorer
+  name: '@deepseek-ai/dsh-runtime'
+
+# Web Runtime Explorer surface.
+- id: ui-runtime
+  name: '@deepseek-ai/dsh-client-ui-runtime'

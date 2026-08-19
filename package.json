@@ -1,0 +1,19 @@
+{
+  "name": "dsh-runtime-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Standalone source repository for the dsh-runtime Runtime Explorer plugin",
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "pnpm@11.7.0",
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "verify": "node scripts/verify-repository.mjs",
+    "pack:dry-run": "npm pack --dry-run ./packages/runtime && npm pack --dry-run ./packages/ui-runtime"
+  }
+}

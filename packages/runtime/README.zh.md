@@ -1,0 +1,30 @@
+# @deepseek-ai/dsh-runtime
+
+[English](README.md) | 中文
+
+`dsh-runtime` 探查器的只读 Host 网关。`RuntimeExplorerGateway` 注册 `runtimeExplorer` 服务，并发布直接 Remote `runtimeExplorer/snapshot`。每份快照都会携带启动器精确选择的 profile，并将当前 Cordis Loader 条目投影为插件节点，包含根 Fiber 阶段、提供与注入的服务、未满足的注入、有上限的 effect 标签，以及由服务所有关系派生的依赖边。未提供启动 profile 的非 DSH 嵌入宿主会返回 `null`；网关不会从文件或进程参数中猜测。
+
+网关还会观察 `session/event`，用有界环形窗口保留请求追踪所需的关联元数据。一条记录可包含事件类型、时间、序号、会话 id、turn、step、call id、工具名、结果与序列化 payload 的字符数。它不会保留或返回提示词、模型输出、工具参数或工具结果内容。Loader、Fiber 和 Session 仍是生命周期权威；本包只投影它们的实时状态。
+
+## 配置
+
+- `traceLimit` 控制内存中保留的最近事件元数据条数，默认为 `256`，最小为 `1`。
+- `effectLimit` 控制每个 Loader 条目返回的 effect 标签上限，默认为 `12`。
+- `refreshIntervalMs` 告诉浏览器在探查器打开时多久请求一次快照，默认为 `1500`，最小为 `250`。
+
+公开 payload 类型从 `./types` 导出。Typert 生成由 `./typert` 与 `./remote` 暴露的 Host 和 Client Remote 产物；浏览器通过显式的 [`api-remotes`](../../api/remotes/README.md) 组合消费 Client 产物，而不会导入这个 Host 实现。
+
+## 模型体验
+
+无，因为这个只读诊断网关只观察运行时状态，不注册提示词、工具、消息、提供方请求或 Agent loop 修改。
+
+#### KV Cache 影响
+
+无；它从不组装模型输入。
+
+## 已知限制与暂缓事项
+
+- 依赖图是 Loader 所有的根 Fiber 与 Cordis 服务归属的当下投影。它不保留持久历史，也不推断绕过 Cordis 注入的依赖。
+- 追踪从这个 Host 插件激活时开始，只存在于当前进程，并会在超过 `traceLimit` 时驱逐旧记录。
+- `payloadChars` 是在丢弃 payload 之前计算的诊断性大小指标，不是字节数。
+- Remote 刻意保持只读：它不能启用、停用、安装、移除或重启插件。
