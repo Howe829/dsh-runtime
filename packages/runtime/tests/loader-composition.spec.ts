@@ -77,6 +77,13 @@ describe('dsh-runtime real Loader composition', () => {
 
     const runtime = ctx.get('runtimeExplorer') as RuntimeExplorerGateway
     const first = runtime.snapshot()
+    expect(first).toMatchObject({
+      schemaVersion: 3,
+      bootId: expect.any(String),
+      snapshotSeq: 1,
+      capabilities: { payloadCapture: false },
+      limits: { transitionLimit: 0, traceEventLimit: 4 },
+    })
     expect(first.refreshIntervalMs).toBe(750)
     expect(first.graph.nodes.map(node => node.moduleName)).toEqual(expect.arrayContaining([PROVIDER, CONSUMER, RUNTIME]))
     expect(first.graph.edges.some(edge => edge.services.includes('loaderDependency'))).toBe(true)

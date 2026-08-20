@@ -4,7 +4,9 @@ import Loader from '@deepseek-ai/cordis-plugin-loader'
 import { provideCmdline } from '@deepseek-ai/dsh-cmdline'
 import { Session, SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
 import { remoteMethods } from '@deepseek-ai/dsh-typert-protocol'
-import RuntimeExplorerGateway, { projectRuntimeGraph, projectTraceEvent } from '../src/index.ts'
+import RuntimeExplorerGateway, {
+  projectRuntimeGraph, projectServiceOverview, projectTraceEvent,
+} from '../src/index.ts'
 
 const contexts: Context[] = []
 
@@ -74,6 +76,9 @@ describe('RuntimeExplorerGateway', () => {
     expect(graph.nodes).toHaveLength(4)
     expect(graph.nodes.find(node => node.entryId === providerEntry)).toMatchObject({
       label: 'cordis:provider',
+      logicalKey: `entry:${providerEntry}`,
+      fiberId: expect.any(String),
+      runtimeId: expect.any(String),
       phase: 'active',
       provides: ['alpha', 'beta'],
       injects: ['alpha'],
@@ -90,19 +95,86 @@ describe('RuntimeExplorerGateway', () => {
       label: 'disabled', enabled: false, phase: null, effects: [], effectCount: 0,
     })
     expect(graph.edges).toEqual([{
+      id: `injects:entry:${consumerEntry}->entry:${providerEntry}`,
+      type: 'injects',
       source: `entry:${consumerEntry}`,
       target: `entry:${providerEntry}`,
       services: ['alpha', 'beta'],
     }])
     expect(graph.edges.some(edge => edge.source === `entry:${providerEntry}` && edge.target === `entry:${providerEntry}`)).toBe(false)
 
-    expect(runtime.snapshot()).toMatchObject({
+    const firstSnapshot = runtime.snapshot()
+    const secondSnapshot = runtime.snapshot()
+    expect(firstSnapshot).toMatchObject({
+      schemaVersion: 3,
+      bootId: expect.any(String),
+      snapshotSeq: 1,
       profile: 'fixture-profile',
       refreshIntervalMs: 900,
+      overview: {
+        status: 'running',
+        uptimeMs: expect.any(Number),
+        contexts: expect.any(Number),
+        plugins: ctx.registry.size,
+        fibers: expect.any(Number),
+        turns: 0,
+        active: expect.any(Number),
+        effects: expect.any(Number),
+        events: 0,
+        errors: 0,
+      },
       graph,
       trace: [],
+      capabilities: {
+        fiberInstances: false,
+        ownershipEdges: false,
+        scopes: false,
+        lifecycleTransitions: false,
+        turnPluginAttribution: false,
+        eventDispatch: 'none',
+        payloadCapture: false,
+      },
+      limits: { transitionLimit: 0, traceEventLimit: 2 },
     })
+    expect(secondSnapshot.bootId).toBe(firstSnapshot.bootId)
+    expect(secondSnapshot.snapshotSeq).toBe(2)
+    expect(secondSnapshot.graph.nodes.find(node => node.entryId === providerEntry)?.fiberId)
+      .toBe(firstSnapshot.graph.nodes.find(node => node.entryId === providerEntry)?.fiberId)
+    expect(firstSnapshot.overview.loaderBreakdown).toMatchObject({
+      total: graph.nodes.length,
+      statuses: { pending: 1, active: 2, disposed: 1, failed: 0 },
+    })
+    expect(firstSnapshot.overview.fiberBreakdown.total).toBe(firstSnapshot.overview.fibers)
+    expect(firstSnapshot.overview.serviceBreakdown.implementations)
+      .toBeGreaterThanOrEqual(firstSnapshot.overview.serviceBreakdown.total)
+    for (const breakdown of [
+      firstSnapshot.overview.loaderBreakdown,
+      firstSnapshot.overview.fiberBreakdown,
+      firstSnapshot.overview.serviceBreakdown,
+    ]) {
+      expect(Object.values(breakdown.statuses).reduce((sum, count) => sum + count, 0)).toBe(breakdown.total)
+      expect(breakdown.byType.reduce((sum, row) => sum + row.total, 0)).toBe(breakdown.total)
+    }
     expect(remoteMethods(runtime)).toEqual([{ method: 'snapshot', invocation: { kind: 'direct' } }])
+  })
+
+  it('reports service registration separately from provider Fiber health', () => {
+    const fiber = (state: number, name: string) => ({
+      state, name, entry: { options: { name } },
+    }) as unknown as import('@deepseek-ai/cordis').Fiber
+    const breakdown = projectServiceOverview([
+      { name: 'shared', fiber: fiber(2, '@fixture/active-provider') },
+      { name: 'shared', fiber: fiber(0, '@fixture/pending-provider') },
+      { name: 'broken', fiber: fiber(3, '@fixture/failed-provider') },
+      { name: 'retired', fiber: fiber(4, '@fixture/disposed-provider') },
+    ])
+
+    expect(breakdown).toMatchObject({
+      total: 2,
+      implementations: 3,
+      statuses: { pending: 0, active: 1, disposed: 0, failed: 1 },
+    })
+    expect(breakdown.byType.reduce((sum, row) => sum + row.total, 0)).toBe(2)
   })
 
   it('retains only bounded event metadata and never exposes prompt or tool payload content', async () => {
@@ -135,6 +207,71 @@ describe('RuntimeExplorerGateway', () => {
     expect(snapshot.trace[1]).toMatchObject({ lane: 'agent', outcome: 'completed' })
     expect(JSON.stringify(snapshot)).not.toContain(secretPrompt)
     expect(JSON.stringify(snapshot)).not.toContain(secretArguments)
+  })
+
+  it('keeps process-lifetime Turn, Event, and Error counters beyond the bounded trace window', async () => {
+    const { ctx, runtime } = await harness({ traceLimit: 1, effectLimit: 1, refreshIntervalMs: 900 })
+    const session = Session.create(SessionId('overview-session'))
+    const events = [
+      {
+        type: 'turn/start', seq: 1, time: 10, data: { turn: 1 },
+      },
+      {
+        type: 'tool/result', seq: 2, time: 20,
+        data: {
+          turn: 1, step: 1,
+          message: { source: { callId: 'call-1' }, content: [{ isError: true }] },
+        },
+      },
+      {
+        type: 'turn/end', seq: 3, time: 30,
+        data: { turn: 1, reason: { kind: 'error', error: { message: 'fixture failure' } } },
+      },
+    ] as SessionEvent[]
+    for (const event of events) ctx.emit('session/event', session, event)
+
+    const snapshot = runtime.snapshot()
+    expect(snapshot.trace).toHaveLength(1)
+    expect(snapshot.overview).toMatchObject({ turns: 1, events: 3, errors: 2 })
+    expect(snapshot.overview.contexts).toBe(snapshot.overview.fibers + 1)
+    expect(snapshot.overview.active).toBeLessThanOrEqual(snapshot.overview.fibers)
+  })
+
+  it('reconciles provider removal and restoration without inventing a stale dependency edge', async () => {
+    const { ctx } = await harness()
+    const providerEntry = await ctx.loader.create({ name: 'cordis:provider' })
+    const consumerEntry = await ctx.loader.create({ name: 'cordis:consumer' })
+    await ctx.loader.await()
+
+    const initial = projectRuntimeGraph(ctx, 3)
+    expect(initial.nodes.find(node => node.entryId === consumerEntry)).toMatchObject({
+      phase: 'active', missing: [],
+    })
+    expect(initial.edges).toEqual([expect.objectContaining({
+      source: `entry:${consumerEntry}`,
+      target: `entry:${providerEntry}`,
+      services: ['alpha', 'beta'],
+    })])
+
+    await ctx.loader.update(providerEntry, { disabled: true })
+    await ctx.loader.await()
+    const withoutProvider = projectRuntimeGraph(ctx, 3)
+    expect(withoutProvider.nodes.find(node => node.entryId === consumerEntry)).toMatchObject({
+      phase: 'pending', missing: ['alpha', 'beta'],
+    })
+    expect(withoutProvider.edges).toEqual([])
+
+    await ctx.loader.update(providerEntry, { disabled: false })
+    await ctx.loader.await()
+    const restored = projectRuntimeGraph(ctx, 3)
+    expect(restored.nodes.find(node => node.entryId === consumerEntry)).toMatchObject({
+      phase: 'active', missing: [],
+    })
+    expect(restored.edges).toEqual([expect.objectContaining({
+      source: `entry:${consumerEntry}`,
+      target: `entry:${providerEntry}`,
+      services: ['alpha', 'beta'],
+    })])
   })
 
   it('reports no profile instead of guessing in an embedding host without launcher facts', async () => {

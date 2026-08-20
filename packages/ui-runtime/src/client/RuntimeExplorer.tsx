@@ -1,10 +1,8 @@
 /** Runtime graph, request trace, filters, and metadata inspector. */
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
-import {
-  ArrowLeftIcon, ArrowsPointingInIcon, ChevronRightIcon, MagnifyingGlassMinusIcon, MagnifyingGlassPlusIcon,
-} from '@heroicons/react/24/outline'
+import { ArrowLeftIcon, ChevronRightIcon, Squares2X2Icon } from '@heroicons/react/24/outline'
 import type {
   RuntimeFiberPhase, RuntimeGraphEdge, RuntimeGraphNode, RuntimeTraceEvent, RuntimeTraceLane,
 } from '@deepseek-ai/dsh-api-remotes/client'
@@ -16,12 +14,17 @@ import type { InjectFace, PropsLocale, PropsRuntime, PropsStore } from '@deepsee
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type { RuntimeExplorerFace } from './faces.ts'
 import {
-  focusRuntimeGraph, layoutRuntimeGraph, RUNTIME_NODE_HEIGHT, RUNTIME_NODE_WIDTH, runtimeGraphRelations,
-  runtimeLifecycleStatus, summarizeRuntimeGraph,
+  focusRuntimeGraph, runtimeGraphRelations, runtimeLifecycleStatus, summarizeRuntimeGraph,
 } from './graph.ts'
-import type { RuntimeGraphSummary, RuntimeNodePosition } from './graph.ts'
+import { RuntimeGraphCanvas } from './RuntimeGraphCanvas.tsx'
+import { RuntimeOverview } from './RuntimeOverview.tsx'
+import { runtimeG6NodeCategory } from './g6-graph.ts'
+import type {
+  RuntimeGraphNeighbourDepth, RuntimeGraphSavedPositions, RuntimeGraphSummary,
+} from './graph.ts'
+import { pruneGraphLayout, readGraphPresentation, writeGraphLayout } from './graph-persistence.ts'
 import type { RuntimeLocaleKey } from './locales.ts'
-import type { createRuntimeStore, RuntimePhaseFilter } from './store.ts'
+import type { createRuntimeStore, RuntimeCategoryFilter, RuntimePhaseFilter } from './store.ts'
 import { filterRuntimeTrace, groupRuntimeTrace, type RuntimeTraceSession, type RuntimeTraceTurn } from './trace.ts'
 import css from './RuntimeExplorer.module.css'
 
@@ -38,6 +41,16 @@ const STATUS_LABELS = {
   failed: 'failed',
 } as const satisfies Record<Exclude<RuntimePhaseFilter, 'all'>, RuntimeLocaleKey>
 
+const CATEGORY_LABELS = {
+  core: 'categoryCore',
+  agent: 'categoryAgent',
+  model: 'categoryModel',
+  tool: 'categoryTool',
+  session: 'categorySession',
+  interface: 'categoryInterface',
+  extension: 'categoryExtension',
+} as const satisfies Record<Exclude<RuntimeCategoryFilter, 'all'>, RuntimeLocaleKey>
+
 const LANE_LABELS = {
   user: 'laneUser',
   agent: 'laneAgent',
@@ -53,10 +66,6 @@ const TURN_STATUS_LABELS = {
   stopped: 'turnStopped',
   incomplete: 'turnIncomplete',
 } as const satisfies Record<RuntimeTraceTurn['status'], RuntimeLocaleKey>
-
-const GRAPH_ZOOM_LEVELS = [0.8, 1, 1.2, 1.4] as const
-const DEFAULT_GRAPH_ZOOM_INDEX = 1
-const GRAPH_PAN_THRESHOLD = 3
 
 function statusKey(phase: RuntimeFiberPhase): Exclude<RuntimePhaseFilter, 'all'> {
   return runtimeLifecycleStatus(phase)
@@ -97,10 +106,11 @@ function MetadataList({ values, empty }: { values: readonly string[]; empty: str
 }
 
 function GraphView({
-  nodes, edges, summary, totalNodes, selectedId, selectedLabel, onSelect, onClearSelection,
-  empty, graphLabel, phaseLabel, t,
+  nodes, allNodes, edges, summary, totalNodes, selectedId, selectedLabel, onSelect, onClearSelection,
+  categoryFilter, onCategoryFilterChange, empty, graphLabel, phaseLabel, profile, t,
 }: {
   nodes: readonly RuntimeGraphNode[]
+  allNodes: readonly RuntimeGraphNode[]
   edges: readonly RuntimeGraphEdge[]
   summary: RuntimeGraphSummary
   totalNodes: number
@@ -108,97 +118,52 @@ function GraphView({
   selectedLabel: string | undefined
   onSelect: (id: string) => void
   onClearSelection: () => void
+  categoryFilter: RuntimeCategoryFilter
+  onCategoryFilterChange: (category: RuntimeCategoryFilter) => void
   empty: string
   graphLabel: string
   phaseLabel: (phase: RuntimeFiberPhase) => string
+  profile: string | null | undefined
   t: RuntimeExplorerProps['t']
 }) {
-  const [zoomIndex, setZoomIndex] = useState(DEFAULT_GRAPH_ZOOM_INDEX)
-  const [panning, setPanning] = useState(false)
-  const [fitRequest, setFitRequest] = useState(0)
-  const focus = useMemo(() => focusRuntimeGraph(nodes, edges, selectedId), [edges, nodes, selectedId])
-  const layout = useMemo(() => layoutRuntimeGraph(focus.nodes, focus.edges), [focus.edges, focus.nodes])
+  const initialPresentation = useRef(readGraphPresentation(profile))
+  const [savedPositions, setSavedPositions] = useState<RuntimeGraphSavedPositions>(initialPresentation.current.positions)
+  const [neighbourDepth, setNeighbourDepth] = useState<RuntimeGraphNeighbourDepth>(
+    initialPresentation.current.neighbourDepth,
+  )
+  const [canvasRevision, setCanvasRevision] = useState(0)
+  const layoutScopeKey = allNodes.map(node => node.logicalKey).sort().join('|')
+  const focus = useMemo(
+    () => focusRuntimeGraph(nodes, edges, selectedId, neighbourDepth),
+    [edges, neighbourDepth, nodes, selectedId],
+  )
   const relations = useMemo(
     () => runtimeGraphRelations(focus.nodes, focus.edges, selectedId),
     [focus.edges, focus.nodes, selectedId],
   )
-  const scroller = useRef<HTMLDivElement>(null)
-  const currentLayout = useRef(layout)
-  currentLayout.current = layout
-  const pan = useRef<{
-    pointerId: number
-    clientX: number
-    clientY: number
-    scrollLeft: number
-    scrollTop: number
-    moved: boolean
-  }>()
-  useLayoutEffect(() => {
-    const viewport = scroller.current
-    if (viewport === null) return
-    const selected = selectedId === undefined ? undefined : currentLayout.current.byId.get(selectedId)
-    if (selected === undefined || viewport.clientWidth === 0 || viewport.clientHeight === 0) {
-      viewport.scrollLeft = 0
-      viewport.scrollTop = 0
-      return
-    }
-    const scale = GRAPH_ZOOM_LEVELS[zoomIndex] as number
-    viewport.scrollLeft = Math.max(0, (selected.x + RUNTIME_NODE_WIDTH / 2) * scale - viewport.clientWidth / 2)
-    viewport.scrollTop = Math.max(0, (selected.y + RUNTIME_NODE_HEIGHT / 2) * scale - viewport.clientHeight / 2)
-  }, [fitRequest, selectedId, zoomIndex])
-  const scale = GRAPH_ZOOM_LEVELS[zoomIndex] as number
-  const startPan = (event: ReactPointerEvent<HTMLDivElement>): void => {
-    if (event.button !== 0 || !event.isPrimary) return
-    if ((event.target as Element).closest('button, a, input, select, textarea') !== null) return
-    const viewport = event.currentTarget
-    pan.current = {
-      pointerId: event.pointerId,
-      clientX: event.clientX,
-      clientY: event.clientY,
-      scrollLeft: viewport.scrollLeft,
-      scrollTop: viewport.scrollTop,
-      moved: false,
-    }
-    viewport.setPointerCapture(event.pointerId)
-    setPanning(true)
+
+  useEffect(() => {
+    const presentation = readGraphPresentation(profile)
+    const pruned = pruneGraphLayout(presentation.positions, allNodes)
+    setSavedPositions(pruned)
+    setNeighbourDepth(presentation.neighbourDepth)
+    writeGraphLayout(profile, pruned, presentation.neighbourDepth)
+    setCanvasRevision(current => current + 1)
+  }, [profile, layoutScopeKey])
+
+  const persistPositions = (positions: RuntimeGraphSavedPositions): void => {
+    setSavedPositions(positions)
+    writeGraphLayout(profile, positions, neighbourDepth)
   }
-  const movePan = (event: ReactPointerEvent<HTMLDivElement>): void => {
-    const gesture = pan.current
-    if (gesture === undefined || gesture.pointerId !== event.pointerId) return
-    const deltaX = event.clientX - gesture.clientX
-    const deltaY = event.clientY - gesture.clientY
-    if (!gesture.moved && Math.hypot(deltaX, deltaY) < GRAPH_PAN_THRESHOLD) return
-    gesture.moved = true
-    event.preventDefault()
-    event.currentTarget.scrollLeft = gesture.scrollLeft - deltaX
-    event.currentTarget.scrollTop = gesture.scrollTop - deltaY
+  const changeNeighbourDepth = (next: RuntimeGraphNeighbourDepth): void => {
+    setNeighbourDepth(next)
+    writeGraphLayout(profile, savedPositions, next)
   }
-  const endPan = (event: ReactPointerEvent<HTMLDivElement>): void => {
-    if (pan.current?.pointerId !== event.pointerId) return
-    pan.current = undefined
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
-    }
-    setPanning(false)
-  }
-  const resetZoom = (): void => {
-    setZoomIndex(DEFAULT_GRAPH_ZOOM_INDEX)
-    const viewport = scroller.current as HTMLDivElement
-    viewport.scrollLeft = 0
-    viewport.scrollTop = 0
-  }
-  const fitView = (): void => {
-    const viewport = scroller.current
-    if (viewport === null) return
-    const availableWidth = Math.max(1, viewport.clientWidth - 48)
-    const availableHeight = Math.max(1, viewport.clientHeight - 48)
-    const ideal = Math.min(availableWidth / layout.width, availableHeight / layout.height)
-    let next = 0
-    for (const [index, level] of GRAPH_ZOOM_LEVELS.entries()) {
-      if (level <= ideal) next = index
-    }
-    setZoomIndex(next)
-    setFitRequest(current => current + 1)
+  const resetGraph = (): void => {
+    setSavedPositions({})
+    setNeighbourDepth(1)
+    writeGraphLayout(profile, {}, 1)
+    setCanvasRevision(current => current + 1)
   }
   const summaryItems: Array<[RuntimeLocaleKey, number, string]> = [
     ['pending', summary.pending, 'pending'],
@@ -206,6 +171,7 @@ function GraphView({
     ['disposed', summary.disposed, 'disposed'],
     ['failed', summary.failed, 'failed'],
   ]
+
   return (
     <div className={css.graphView}>
       <dl className={css.graphSummary} aria-label={t('pluginSummary')}>
@@ -220,6 +186,21 @@ function GraphView({
         <div className={css.focusBar} role="status" aria-live="polite">
           <span className={css.focusIdentity}><span>{t('focusedNode')}</span><strong>{selectedLabel}</strong></span>
           <span className={css.focusCount}>{t('relatedPlugins')} <strong>{focus.nodes.length}</strong> / {totalNodes}</span>
+          <label className={css.depthFilter}>
+            <span>{t('relationDepth')}</span>
+            <select
+              aria-label={t('relationDepth')}
+              value={String(neighbourDepth)}
+              onChange={(event) => {
+                const value = event.target.value
+                changeNeighbourDepth(value === 'all' ? 'all' : value === '2' ? 2 : 1)
+              }}
+            >
+              <option value="1">{t('oneHop')}</option>
+              <option value="2">{t('twoHops')}</option>
+              <option value="all">{t('connectedGraph')}</option>
+            </select>
+          </label>
           <span className={css.relationLegend} aria-label={t('dependencyDirection')}>
             <span data-relation="dependency"><i aria-hidden />{t('dependencies')}</span>
             <span data-relation="dependant"><i aria-hidden />{t('dependants')}</span>
@@ -227,103 +208,42 @@ function GraphView({
           <button type="button" className={css.showAll} onClick={onClearSelection}>{t('showAll')}</button>
         </div>
       )}
-      {nodes.length === 0 ? <div className={css.emptyState}>{empty}</div> : (
-        <div
-          ref={scroller}
-          className={css.graphScroller}
-          data-panning={panning || undefined}
-          tabIndex={0}
-          aria-label={t('panCanvas')}
-          onPointerDown={startPan}
-          onPointerMove={movePan}
-          onPointerUp={endPan}
-          onPointerCancel={endPan}
-          onLostPointerCapture={endPan}
-        >
-          <div
-            className={css.graphStage}
-            style={{ width: layout.width * scale, height: layout.height * scale }}
+      {selectedId === undefined && categoryFilter !== 'all' && (
+        <div className={css.focusBar} role="status" aria-live="polite">
+          <span className={css.focusIdentity}>
+            <span>{t('filteredType')}</span>
+            <strong>{t(CATEGORY_LABELS[categoryFilter])}</strong>
+          </span>
+          <span className={css.focusCount}>
+            {t('visiblePlugins')} <strong>{nodes.length}</strong> / {totalNodes}
+          </span>
+          <button
+            type="button"
+            className={css.showAll}
+            onClick={() => { onCategoryFilterChange('all') }}
           >
-            <svg
-              className={css.graph}
-              width={layout.width}
-              height={layout.height}
-              viewBox={`0 0 ${layout.width} ${layout.height}`}
-              style={{ transform: `scale(${scale})` }}
-              role="img"
-              aria-label={graphLabel}
-            >
-              <g className={css.edges}>
-                {focus.edges.map((edge) => {
-                  const consumer = layout.byId.get(edge.source) as RuntimeNodePosition
-                  const provider = layout.byId.get(edge.target) as RuntimeNodePosition
-                  const x1 = provider.x + RUNTIME_NODE_WIDTH
-                  const y1 = provider.y + RUNTIME_NODE_HEIGHT / 2
-                  const x2 = consumer.x
-                  const y2 = consumer.y + RUNTIME_NODE_HEIGHT / 2
-                  const bend = Math.max(32, (x2 - x1) / 2)
-                  return (
-                    <path
-                      key={`${edge.source}:${edge.target}`}
-                      d={`M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`}
-                      data-relation={relations.edges.get(`${edge.source}:${edge.target}`)}
-                    >
-                      <title>{edge.services.join(', ')}</title>
-                    </path>
-                  )
-                })}
-              </g>
-              {layout.positions.map(({ node, x, y }) => (
-                <foreignObject key={node.id} x={x} y={y} width={RUNTIME_NODE_WIDTH} height={RUNTIME_NODE_HEIGHT}>
-                  <button
-                    type="button"
-                    className={css.graphNode}
-                    data-phase={statusKey(node.phase)}
-                    data-selected={selectedId === node.id || undefined}
-                    data-relation={relations.nodes.get(node.id)}
-                    onClick={() => { onSelect(node.id) }}
-                  >
-                    <span className={css.nodeIcon}><IconCordisPluginOutline14 size={16} /></span>
-                    <span className={css.nodeCopy}>
-                      <strong>{node.label}</strong>
-                      <small><i aria-hidden />{phaseLabel(node.phase)}</small>
-                    </span>
-                  </button>
-                </foreignObject>
-              ))}
-            </svg>
-          </div>
+            {t('clearTypeFilter')}
+          </button>
         </div>
       )}
-      {nodes.length > 0 && <div className={css.zoomControls} role="group" aria-label={t('zoomControls')}>
-        <Tooltip label={t('zoomOut')} side="top" delayMs={400}>
-          <button
-            type="button"
-            aria-label={t('zoomOut')}
-            disabled={zoomIndex === 0}
-            onClick={() => { setZoomIndex(current => Math.max(0, current - 1)) }}
-          >
-            <MagnifyingGlassMinusIcon aria-hidden="true" width={18} height={18} />
-          </button>
-        </Tooltip>
-        <output aria-label={t('zoomLevel')} aria-live="polite">{Math.round(scale * 100)}%</output>
-        <Tooltip label={t('zoomIn')} side="top" delayMs={400}>
-          <button
-            type="button"
-            aria-label={t('zoomIn')}
-            disabled={zoomIndex === GRAPH_ZOOM_LEVELS.length - 1}
-            onClick={() => { setZoomIndex(current => Math.min(GRAPH_ZOOM_LEVELS.length - 1, current + 1)) }}
-          >
-            <MagnifyingGlassPlusIcon aria-hidden="true" width={18} height={18} />
-          </button>
-        </Tooltip>
-        <Tooltip label={t('fitView')} side="top" delayMs={400}>
-          <button type="button" aria-label={t('fitView')} onClick={fitView}>
-            <ArrowsPointingInIcon aria-hidden="true" width={18} height={18} />
-          </button>
-        </Tooltip>
-        <button type="button" onClick={resetZoom}>{t('resetZoom')}</button>
-      </div>}
+      {nodes.length === 0 ? <div className={css.emptyState}>{empty}</div> : (
+        <RuntimeGraphCanvas
+          key={`${profile ?? 'unknown'}:${canvasRevision}:${categoryFilter}`}
+          nodes={focus.nodes}
+          edges={focus.edges}
+          relations={relations}
+          selectedId={selectedId}
+          savedPositions={savedPositions}
+          graphLabel={graphLabel}
+          phaseLabel={phaseLabel}
+          onSelect={onSelect}
+          onPositionsChange={persistPositions}
+          onResetPositions={resetGraph}
+          categoryFilter={categoryFilter}
+          onCategoryFilterChange={onCategoryFilterChange}
+          t={t}
+        />
+      )}
     </div>
   )
 }
@@ -457,9 +377,11 @@ function TraceDirectory({
 }
 
 function PluginInspector({ node, t }: { node: RuntimeGraphNode; t: RuntimeExplorerProps['t'] }) {
-  const rows: Array<[RuntimeLocaleKey, string]> = [
+  const rows: Array<[RuntimeLocaleKey, string | undefined]> = [
     ['module', node.moduleName],
     ['entry', node.entryId],
+    ['fiber', node.fiberId],
+    ['runtimeIdentity', node.runtimeId],
     ['status', t(STATUS_LABELS[statusKey(node.phase)])],
   ]
   return (
@@ -469,8 +391,17 @@ function PluginInspector({ node, t }: { node: RuntimeGraphNode; t: RuntimeExplor
         <div><strong>{node.label}</strong><small>{t('selectedPlugin')}</small></div>
       </div>
       <dl className={css.metadata}>
-        {rows.map(([label, value]) => <div key={label}><dt>{t(label)}</dt><dd>{value}</dd></div>)}
+        {rows.map(([label, value]) => (
+          <div key={label}><dt>{t(label)}</dt><dd>{value ?? <span className={css.emptyValue}>{t('unavailable')}</span>}</dd></div>
+        ))}
       </dl>
+      {statusKey(node.phase) === 'pending' && (
+        <section className={css.pendingDiagnosis} data-missing={node.missing.length > 0 || undefined}>
+          <h3>{t('pendingDiagnosis')}</h3>
+          <p>{t(node.missing.length > 0 ? 'waitingForServices' : 'waitingForRuntime')}</p>
+          {node.missing.length > 0 && <MetadataList values={node.missing} empty={t('noItems')} />}
+        </section>
+      )}
       <section className={css.inspectorSection}><h3>{t('provides')}</h3><MetadataList values={node.provides} empty={t('noItems')} /></section>
       <section className={css.inspectorSection}><h3>{t('injects')}</h3><MetadataList values={node.injects} empty={t('noItems')} /></section>
       {node.missing.length > 0 && <section className={css.inspectorSection} data-warning><h3>{t('missing')}</h3><MetadataList values={node.missing} empty={t('noItems')} /></section>}
@@ -528,11 +459,33 @@ export function RuntimeExplorer({
     () => filterRuntimeTrace(traceSessions, query),
     [query, traceSessions],
   )
+  const observedBootId = useRef<string>()
+  useEffect(() => {
+    if (!state.open || data === undefined) return
+    const processRestarted = observedBootId.current !== undefined && observedBootId.current !== data.bootId
+    observedBootId.current = data.bootId
+    if (processRestarted) {
+      actions.select(undefined)
+      actions.selectTraceTurn(undefined)
+      return
+    }
+    if (state.selection?.kind === 'node' && !data.graph.nodes.some(node => node.id === state.selection?.id)) {
+      actions.select(undefined)
+    } else if (state.selection?.kind === 'event' && !data.trace.some(event => event.id === state.selection?.id)) {
+      actions.select(undefined)
+    }
+    if (state.traceTurnKey !== undefined && !traceSessions.some(session => (
+      session.turns.some(turn => turn.key === state.traceTurnKey)
+    ))) {
+      actions.selectTraceTurn(undefined)
+    }
+  }, [actions, data, state.open, state.selection, state.traceTurnKey, traceSessions])
   if (!state.open) return null
 
   const graphNodes = data?.graph.nodes.filter(node => (
     includesNode(node, query)
     && (state.phase === 'all' || statusKey(node.phase) === state.phase)
+    && (state.category === 'all' || runtimeG6NodeCategory(node.moduleName, node.label) === state.category)
   )) ?? []
   const graphEdges = data === undefined ? [] : graphEdgesFor(graphNodes, data.graph.edges)
   const selectedTurn = traceSessions.flatMap(session => session.turns)
@@ -553,7 +506,7 @@ export function RuntimeExplorer({
     <section className={css.surface} style={{ left: state.sidebarOffset }} aria-label={t('title')}>
       <header className={css.header}>
         <div className={css.brandIcon}><IconBranchOutline16 size={20} /></div>
-        <div className={css.heading}><h1>{t('title')}</h1><p>{t('subtitle')}</p></div>
+        <div className={css.heading}><h1>{t('title')}</h1></div>
         <span className={css.liveBadge}><i aria-hidden />{t('live')}</span>
         <span
           className={css.profileBadge}
@@ -576,6 +529,9 @@ export function RuntimeExplorer({
       </header>
       <div className={css.toolbar}>
         <div className={css.tabs}>
+          <button type="button" data-active={state.tab === 'overview' || undefined} onClick={() => { actions.setTab('overview') }}>
+            <Squares2X2Icon width={15} />{t('overviewTab')}
+          </button>
           <button type="button" data-active={state.tab === 'graph' || undefined} onClick={() => { actions.setTab('graph') }}>
             <IconBranchOutline16 size={15} />{t('graphTab')}
           </button>
@@ -583,7 +539,7 @@ export function RuntimeExplorer({
             <IconDataOutline16 size={15} />{t('traceTab')}
           </button>
         </div>
-        <label className={css.search}>
+        {state.tab !== 'overview' && <label className={css.search}>
           <IconSearchOutline16 size={16} />
           <input
             value={state.query}
@@ -592,7 +548,7 @@ export function RuntimeExplorer({
               : selectedTurn === undefined ? 'searchTrace' : 'searchTurnTrace')}
             onChange={(event) => { actions.setQuery(event.target.value) }}
           />
-        </label>
+        </label>}
         {state.tab === 'graph' && (
           <select
             className={css.phaseFilter}
@@ -613,20 +569,35 @@ export function RuntimeExplorer({
           {remote.error !== undefined && data === undefined && (
             <div className={css.emptyState}><p>{t('loadFailed')}</p><button type="button" onClick={onRefresh}>{t('retry')}</button></div>
           )}
+          {data !== undefined && state.tab === 'overview' && (
+            <RuntimeOverview
+              overview={data.overview}
+              t={t}
+              onInspect={(category, status) => {
+                actions.setTab('graph')
+                actions.setPhase(status)
+                actions.setCategory(category ?? 'all')
+              }}
+            />
+          )}
           {data !== undefined && state.tab === 'graph' && (
             <GraphView
               nodes={graphNodes}
+              allNodes={data.graph.nodes}
               edges={graphEdges}
               summary={summarizeRuntimeGraph(data.graph.nodes)}
               totalNodes={data.graph.nodes.length}
               selectedId={selectedNode?.id}
               selectedLabel={selectedNode?.label}
+              profile={data.profile}
               empty={t('emptyGraph')}
               graphLabel={t('graphLabel')}
               phaseLabel={phase => t(STATUS_LABELS[statusKey(phase)])}
+              categoryFilter={state.category}
               t={t}
               onSelect={(id) => { actions.select({ kind: 'node', id }) }}
               onClearSelection={() => { actions.select(undefined) }}
+              onCategoryFilterChange={(category) => { actions.setCategory(category) }}
             />
           )}
           {data !== undefined && state.tab === 'trace' && (

@@ -2,13 +2,83 @@
 import { z } from 'zod'
 
 const _deepseek_ai_dsh_runtime_runtimeExplorer_snapshot_result$schema = z.object({
+  'schemaVersion': z.literal(3).readonly(),
+  'bootId': z.string().readonly(),
+  'snapshotSeq': z.number().readonly(),
   'profile': z.union([z.literal(null), z.string()]).readonly(),
   'observedAt': z.number().readonly(),
   'refreshIntervalMs': z.number().readonly(),
+  'overview': z.object({
+  'status': z.literal("running").readonly(),
+  'uptimeMs': z.number().readonly(),
+  'contexts': z.number().readonly(),
+  'plugins': z.number().readonly(),
+  'fibers': z.number().readonly(),
+  'turns': z.number().readonly(),
+  'active': z.number().readonly(),
+  'effects': z.number().readonly(),
+  'events': z.number().readonly(),
+  'errors': z.number().readonly(),
+  'loaderBreakdown': z.object({
+  'total': z.number().readonly(),
+  'statuses': z.object({
+  'pending': z.number().readonly(),
+  'active': z.number().readonly(),
+  'disposed': z.number().readonly(),
+  'failed': z.number().readonly(),
+}).readonly(),
+  'byType': z.array(z.object({
+  'category': z.union([z.literal("core"), z.literal("agent"), z.literal("model"), z.literal("tool"), z.literal("session"), z.literal("interface"), z.literal("extension")]).readonly(),
+  'total': z.number().readonly(),
+  'pending': z.number().readonly(),
+  'active': z.number().readonly(),
+  'disposed': z.number().readonly(),
+  'failed': z.number().readonly(),
+})).readonly(),
+}).readonly(),
+  'fiberBreakdown': z.object({
+  'total': z.number().readonly(),
+  'statuses': z.object({
+  'pending': z.number().readonly(),
+  'active': z.number().readonly(),
+  'disposed': z.number().readonly(),
+  'failed': z.number().readonly(),
+}).readonly(),
+  'byType': z.array(z.object({
+  'category': z.union([z.literal("core"), z.literal("agent"), z.literal("model"), z.literal("tool"), z.literal("session"), z.literal("interface"), z.literal("extension")]).readonly(),
+  'total': z.number().readonly(),
+  'pending': z.number().readonly(),
+  'active': z.number().readonly(),
+  'disposed': z.number().readonly(),
+  'failed': z.number().readonly(),
+})).readonly(),
+}).readonly(),
+  'serviceBreakdown': z.object({
+  'implementations': z.number().readonly(),
+  'total': z.number().readonly(),
+  'statuses': z.object({
+  'pending': z.number().readonly(),
+  'active': z.number().readonly(),
+  'disposed': z.number().readonly(),
+  'failed': z.number().readonly(),
+}).readonly(),
+  'byType': z.array(z.object({
+  'category': z.union([z.literal("core"), z.literal("agent"), z.literal("model"), z.literal("tool"), z.literal("session"), z.literal("interface"), z.literal("extension")]).readonly(),
+  'total': z.number().readonly(),
+  'pending': z.number().readonly(),
+  'active': z.number().readonly(),
+  'disposed': z.number().readonly(),
+  'failed': z.number().readonly(),
+})).readonly(),
+}).readonly(),
+}).readonly(),
   'graph': z.object({
   'nodes': z.array(z.object({
   'id': z.string().readonly(),
+  'logicalKey': z.string().readonly(),
   'entryId': z.string().readonly(),
+  'fiberId': z.string().readonly().optional(),
+  'runtimeId': z.string().readonly().optional(),
   'moduleName': z.string().readonly(),
   'label': z.string().readonly(),
   'enabled': z.boolean().readonly(),
@@ -20,6 +90,8 @@ const _deepseek_ai_dsh_runtime_runtimeExplorer_snapshot_result$schema = z.object
   'effectCount': z.number().readonly(),
 })).readonly(),
   'edges': z.array(z.object({
+  'id': z.string().readonly(),
+  'type': z.literal("injects").readonly(),
   'source': z.string().readonly(),
   'target': z.string().readonly(),
   'services': z.array(z.string()).readonly(),
@@ -31,7 +103,7 @@ const _deepseek_ai_dsh_runtime_runtimeExplorer_snapshot_result$schema = z.object
   'type': z.string().readonly(),
   'seq': z.number().readonly(),
   'time': z.number().readonly(),
-  'lane': z.union([z.literal("user"), z.literal("agent"), z.literal("llm"), z.literal("tool"), z.literal("session")]).readonly(),
+  'lane': z.union([z.literal("agent"), z.literal("tool"), z.literal("session"), z.literal("user"), z.literal("llm")]).readonly(),
   'payloadChars': z.number().readonly(),
   'turn': z.number().readonly().optional(),
   'step': z.number().readonly().optional(),
@@ -39,6 +111,19 @@ const _deepseek_ai_dsh_runtime_runtimeExplorer_snapshot_result$schema = z.object
   'name': z.string().readonly().optional(),
   'outcome': z.string().readonly().optional(),
 })).readonly(),
+  'capabilities': z.object({
+  'fiberInstances': z.boolean().readonly(),
+  'ownershipEdges': z.boolean().readonly(),
+  'scopes': z.boolean().readonly(),
+  'lifecycleTransitions': z.boolean().readonly(),
+  'turnPluginAttribution': z.boolean().readonly(),
+  'eventDispatch': z.union([z.literal("none"), z.literal("summary"), z.literal("listener")]).readonly(),
+  'payloadCapture': z.literal(false).readonly(),
+}).readonly(),
+  'limits': z.object({
+  'transitionLimit': z.number().readonly(),
+  'traceEventLimit': z.number().readonly(),
+}).readonly(),
 })
 
 export const TYPERT_REMOTE = {
@@ -57,7 +142,7 @@ export const TYPERT_REMOTE = {
         typeSymbol: '@deepseek-ai/dsh-runtime/types#RuntimeExplorerSnapshot',
         schema: _deepseek_ai_dsh_runtime_runtimeExplorer_snapshot_result$schema,
       },
-      sourceLocation: {"file":"packages/extensions/runtime/src/index.ts","line":235,"column":3},
+      sourceLocation: {"file":"packages/extensions/runtime/src/index.ts","line":431,"column":3},
     },
   ],
 }

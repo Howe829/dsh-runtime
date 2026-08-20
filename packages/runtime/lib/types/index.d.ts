@@ -1,9 +1,9 @@
 /** Read-only Cordis runtime graph and privacy-safe session event trace. */
-import type { Context } from '@deepseek-ai/cordis';
+import type { Context, Fiber } from '@deepseek-ai/cordis';
 import z from '@deepseek-ai/schemastery';
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session';
 import { TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol';
-import type { RuntimeExplorerSnapshot, RuntimeGraphSnapshot, RuntimeTraceEvent } from './types.ts';
+import type { RuntimeExplorerSnapshot, RuntimeGraphSnapshot, RuntimeServiceOverview, RuntimeTraceEvent } from './types.ts';
 export type * from './types.ts';
 /** Deployment controls for browser refresh and bounded diagnostic projections. */
 export interface Config {
@@ -14,6 +14,10 @@ export interface Config {
     /** Browser snapshot refresh cadence while the explorer is open. @default 1500 */
     refreshIntervalMs?: number;
 }
+export declare function projectServiceOverview(implementations: readonly {
+    name: string;
+    fiber: Fiber;
+}[]): RuntimeServiceOverview;
 /**
  * Build one dependency graph from the current Loader and service stores.
  * @param ctx - Cordis context that owns Loader, Fiber, and service state.

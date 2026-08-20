@@ -1,6 +1,7 @@
 /** Read-only Cordis runtime graph and privacy-safe session event trace. */
 
-import type { Context, EffectMeta, Fiber, FiberState } from '@deepseek-ai/cordis'
+import { randomUUID } from 'node:crypto'
+import type { Context, EffectMeta, Fiber, FiberState, Plugin } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/cordis-plugin-loader'
 import z from '@deepseek-ai/schemastery'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
@@ -9,20 +10,75 @@ import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 // Typert-generated ./typert and ./remote artifacts import Zod at runtime.
 import type {} from 'zod'
 import type {
+  RuntimeExplorerCapabilities,
   RuntimeExplorerSnapshot,
   RuntimeFiberPhase,
   RuntimeGraphEdge,
   RuntimeGraphNode,
   RuntimeGraphSnapshot,
+  RuntimeCollectionOverview,
+  RuntimeOverviewSnapshot,
+  RuntimeOverviewStatus,
+  RuntimePluginCategory,
+  RuntimeServiceOverview,
+  RuntimeStatusCounts,
   RuntimeTraceEvent,
   RuntimeTraceLane,
 } from './types.ts'
+import { RUNTIME_EXPLORER_SCHEMA_VERSION } from './types.ts'
 
 export type * from './types.ts'
 
 const DEFAULT_TRACE_LIMIT = 256
 const DEFAULT_EFFECT_LIMIT = 12
 const DEFAULT_REFRESH_INTERVAL_MS = 1500
+const RUNTIME_PROCESS_STATE = Symbol.for('@deepseek-ai/dsh-runtime/process-state')
+
+interface RuntimeProcessState {
+  readonly bootId: string
+  snapshotSeq: number
+  nextRuntimeId: number
+  eventCount: number
+  turnCount: number
+  errorCount: number
+  readonly runtimeIds: WeakMap<Plugin.Runtime, string>
+}
+
+const CAPABILITIES: RuntimeExplorerCapabilities = {
+  fiberInstances: false,
+  ownershipEdges: false,
+  scopes: false,
+  lifecycleTransitions: false,
+  turnPluginAttribution: false,
+  eventDispatch: 'none',
+  payloadCapture: false,
+}
+
+function runtimeProcessState(ctx: Context): RuntimeProcessState {
+  const root = ctx.root as Context & Record<PropertyKey, unknown>
+  const current = root[RUNTIME_PROCESS_STATE]
+  if (current !== undefined) return current as RuntimeProcessState
+  const created: RuntimeProcessState = {
+    bootId: randomUUID(),
+    snapshotSeq: 0,
+    nextRuntimeId: 0,
+    eventCount: 0,
+    turnCount: 0,
+    errorCount: 0,
+    runtimeIds: new WeakMap(),
+  }
+  Object.defineProperty(root, RUNTIME_PROCESS_STATE, { value: created })
+  return created
+}
+
+function pluginRuntimeId(state: RuntimeProcessState, runtime: Plugin.Runtime | null): string | undefined {
+  if (runtime === null) return undefined
+  const current = state.runtimeIds.get(runtime)
+  if (current !== undefined) return current
+  const created = `${state.bootId}:runtime:${++state.nextRuntimeId}`
+  state.runtimeIds.set(runtime, created)
+  return created
+}
 
 /** Deployment controls for browser refresh and bounded diagnostic projections. */
 export interface Config {
@@ -56,6 +112,17 @@ const FIBER_PHASE = {
   [FIBER_STATE.UNLOADING]: 'unloading',
 } as const satisfies Record<FiberState, RuntimeFiberPhase>
 
+const RUNTIME_CATEGORIES = [
+  'core', 'agent', 'model', 'tool', 'session', 'interface', 'extension',
+] as const satisfies readonly RuntimePluginCategory[]
+
+const STATUS_PRIORITY = {
+  disposed: 0,
+  failed: 1,
+  pending: 2,
+  active: 3,
+} as const satisfies Record<RuntimeOverviewStatus, number>
+
 function shortLabel(moduleName: string): string {
   const slash = moduleName.lastIndexOf('/')
   const tail = slash < 0 ? moduleName : moduleName.slice(slash + 1)
@@ -64,6 +131,83 @@ function shortLabel(moduleName: string): string {
 
 function entryNodeId(entryId: string): string {
   return `entry:${entryId}`
+}
+
+function lifecycleStatus(state: FiberState): RuntimeOverviewStatus {
+  if (state === FIBER_STATE.ACTIVE) return 'active'
+  if (state === FIBER_STATE.FAILED) return 'failed'
+  if (state === FIBER_STATE.DISPOSED) return 'disposed'
+  return 'pending'
+}
+
+function phaseStatus(phase: RuntimeFiberPhase): RuntimeOverviewStatus {
+  if (phase === 'active') return 'active'
+  if (phase === 'failed') return 'failed'
+  if (phase === null) return 'disposed'
+  return 'pending'
+}
+
+/** Infer the same stable product domain used by the browser dependency graph. */
+function runtimePluginCategory(moduleName: string, label: string): RuntimePluginCategory {
+  const name = `${moduleName} ${label}`.toLowerCase()
+  const short = label.toLowerCase()
+  if (name.includes('cordis') || ['runtime', 'loader', 'app-boot', 'boot', 'root'].includes(short)) return 'core'
+  if (/^(session|memory|persistence|projection|spill|title)(-|$)/.test(short)) return 'session'
+  if (/^(agent|persona|goal|plan|permission|repeat-tool)(-|$)/.test(short)) return 'agent'
+  if (/^(llm|model|token)(-|$)/.test(short)) return 'model'
+  if (/^(tool|tools|sandbox|attachment|code-runtime|deliverables|modules)(-|$)/.test(short)) return 'tool'
+  if (/^(ui|client|web|cmdline|settings|terminal|api-remotes|apiproxy)(-|$)/.test(short)) return 'interface'
+  return 'extension'
+}
+
+interface RuntimeOverviewItem {
+  readonly category: RuntimePluginCategory
+  readonly status: RuntimeOverviewStatus
+}
+
+function emptyStatusCounts(): Record<RuntimeOverviewStatus, number> {
+  return { pending: 0, active: 0, disposed: 0, failed: 0 }
+}
+
+function summarizeRuntimeCollection(items: readonly RuntimeOverviewItem[]): RuntimeCollectionOverview {
+  const statuses = emptyStatusCounts()
+  const categories = new Map<RuntimePluginCategory, Record<RuntimeOverviewStatus, number>>()
+  for (const item of items) {
+    statuses[item.status] += 1
+    const counts = categories.get(item.category) ?? emptyStatusCounts()
+    counts[item.status] += 1
+    categories.set(item.category, counts)
+  }
+  return {
+    total: items.length,
+    statuses: statuses as RuntimeStatusCounts,
+    byType: RUNTIME_CATEGORIES.flatMap((category) => {
+      const counts = categories.get(category)
+      if (counts === undefined) return []
+      const total = counts.pending + counts.active + counts.disposed + counts.failed
+      return [{ category, total, ...counts }]
+    }),
+  }
+}
+
+export function projectServiceOverview(
+  implementations: readonly { name: string; fiber: Fiber }[],
+): RuntimeServiceOverview {
+  const registered = implementations.filter(implementation => implementation.fiber.state !== FIBER_STATE.DISPOSED)
+  const services = new Map<string, RuntimeOverviewItem>()
+  for (const implementation of registered) {
+    const status = lifecycleStatus(implementation.fiber.state)
+    const moduleName = implementation.fiber.entry?.options.name ?? implementation.fiber.name
+    const item = { category: runtimePluginCategory(moduleName, shortLabel(moduleName)), status }
+    const current = services.get(implementation.name)
+    if (current === undefined || STATUS_PRIORITY[item.status] > STATUS_PRIORITY[current.status]) {
+      services.set(implementation.name, item)
+    }
+  }
+  return {
+    ...summarizeRuntimeCollection([...services.values()]),
+    implementations: registered.length,
+  }
 }
 
 function owningEntryId(fiber: Fiber): string | undefined {
@@ -87,6 +231,47 @@ function effectLabels(effects: readonly EffectMeta[]): string[] {
   return effects.flatMap(effect => [effect.label, ...effectLabels(effect.children)])
 }
 
+/** Project process-lifetime Cordis and Agent counters without exposing payload data. */
+function projectRuntimeOverview(
+  ctx: Context,
+  state: RuntimeProcessState,
+  graph: RuntimeGraphSnapshot,
+): RuntimeOverviewSnapshot {
+  const fibers = [...ctx.registry.values()].flatMap(runtime => [...runtime.fibers])
+  const implementations = liveImplementations(ctx)
+  const loaderBreakdown = summarizeRuntimeCollection(graph.nodes.map(node => ({
+    category: runtimePluginCategory(node.moduleName, node.label),
+    status: phaseStatus(node.phase),
+  })))
+  const fiberBreakdown = summarizeRuntimeCollection(fibers.map((fiber) => {
+    const moduleName = fiber.entry?.options.name ?? fiber.runtime?.name ?? fiber.name
+    return {
+      category: runtimePluginCategory(moduleName, shortLabel(moduleName)),
+      status: lifecycleStatus(fiber.state),
+    }
+  }))
+  return {
+    status: 'running',
+    uptimeMs: Math.max(0, Math.floor(process.uptime() * 1000)),
+    contexts: fibers.length + 1,
+    plugins: ctx.registry.size,
+    fibers: fibers.length,
+    turns: state.turnCount,
+    active: fibers.filter(fiber => fiber.state === FIBER_STATE.ACTIVE).length,
+    effects: graph.nodes.reduce((count, node) => count + node.effectCount, 0),
+    events: state.eventCount,
+    errors: state.errorCount,
+    loaderBreakdown,
+    fiberBreakdown,
+    serviceBreakdown: projectServiceOverview(implementations),
+  }
+}
+
+function isErrorEvent(event: SessionEvent): boolean {
+  if (event.type === 'tool/result') return event.data.message.content[0].isError === true
+  return event.type === 'turn/end' && event.data.reason.kind === 'error'
+}
+
 /**
  * Build one dependency graph from the current Loader and service stores.
  * @param ctx - Cordis context that owns Loader, Fiber, and service state.
@@ -94,6 +279,7 @@ function effectLabels(effects: readonly EffectMeta[]): string[] {
  * @returns A point-in-time graph containing non-group Loader entries and service-derived edges.
  */
 export function projectRuntimeGraph(ctx: Context, effectLimit: number): RuntimeGraphSnapshot {
+  const processState = runtimeProcessState(ctx)
   const implementations = liveImplementations(ctx)
   const providerByService = new Map(implementations.map(impl => [impl.name, owningEntryId(impl.fiber)]))
   const providedByEntry = new Map<string, string[]>()
@@ -127,9 +313,13 @@ export function projectRuntimeGraph(ctx: Context, effectLimit: number): RuntimeG
       edgeServices.set(key, edge)
     }
     const effects = fiber === undefined ? [] : effectLabels(fiber.getEffects())
+    const runtimeId = fiber === undefined ? undefined : pluginRuntimeId(processState, fiber.runtime)
     nodes.push({
       id: source,
+      logicalKey: source,
       entryId: entry.id,
+      ...(fiber === undefined || fiber.uid === null ? {} : { fiberId: `${processState.bootId}:${fiber.uid}` }),
+      ...(runtimeId === undefined ? {} : { runtimeId }),
       moduleName: entry.options.name,
       label: shortLabel(entry.options.name),
       enabled: !entry.disabled,
@@ -142,6 +332,8 @@ export function projectRuntimeGraph(ctx: Context, effectLimit: number): RuntimeG
     })
   }
   const edges: RuntimeGraphEdge[] = [...edgeServices.values()].map(edge => ({
+    id: `injects:${edge.source}->${edge.target}`,
+    type: 'injects',
     source: edge.source,
     target: edge.target,
     services: edge.services.sort(),
@@ -221,6 +413,10 @@ export class RuntimeExplorerGateway extends TypertRemoteService {
     super(ctx, 'runtimeExplorer')
     this.resolved = config as ResolvedConfig
     ctx.on('session/event', (session, event) => {
+      const processState = runtimeProcessState(ctx)
+      processState.eventCount += 1
+      if (event.type === 'turn/start') processState.turnCount += 1
+      if (isErrorEvent(event)) processState.errorCount += 1
       this.trace.push(projectTraceEvent(session, event))
       const overflow = this.trace.length - this.resolved.traceLimit
       if (overflow > 0) this.trace.splice(0, overflow)
@@ -233,12 +429,23 @@ export class RuntimeExplorerGateway extends TypertRemoteService {
    */
   @Remote('snapshot')
   snapshot(): RuntimeExplorerSnapshot {
+    const processState = runtimeProcessState(this.ctx)
+    const graph = projectRuntimeGraph(this.ctx, this.resolved.effectLimit)
     return {
+      schemaVersion: RUNTIME_EXPLORER_SCHEMA_VERSION,
+      bootId: processState.bootId,
+      snapshotSeq: ++processState.snapshotSeq,
       profile: this.ctx.get('launchProfile')?.get() ?? null,
       observedAt: Date.now(),
       refreshIntervalMs: this.resolved.refreshIntervalMs,
-      graph: projectRuntimeGraph(this.ctx, this.resolved.effectLimit),
+      overview: projectRuntimeOverview(this.ctx, processState, graph),
+      graph,
       trace: [...this.trace],
+      capabilities: CAPABILITIES,
+      limits: {
+        transitionLimit: 0,
+        traceEventLimit: this.resolved.traceLimit,
+      },
     }
   }
 }

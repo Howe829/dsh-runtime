@@ -1,4 +1,5 @@
 /** Observable Remote snapshot with single-flight refresh and open-only polling. */
+const SUPPORTED_SCHEMA_VERSION = 3;
 /**
  * Build the browser source over the generated Remote call.
  * @param read - Invoke the mounted runtimeExplorer snapshot Remote.
@@ -41,6 +42,12 @@ export function createRuntimeSource(read, onError) {
             inFlight = read().then((data) => {
                 if (disposed)
                     return;
+                if (data.schemaVersion !== SUPPORTED_SCHEMA_VERSION) {
+                    const error = new Error('unsupported runtime snapshot schema');
+                    onError(error);
+                    publish({ ...snapshot, loading: false, error: error.message });
+                    return;
+                }
                 publish({ data, loading: false, error: undefined });
                 schedule(data.refreshIntervalMs);
             }, (error) => {

@@ -3,11 +3,35 @@ import type { RuntimeExplorerSnapshot } from '@deepseek-ai/dsh-api-remotes/clien
 import { createRuntimeSource } from '../src/client/source.ts'
 
 const snapshot = (observedAt: number, refreshIntervalMs = 500): RuntimeExplorerSnapshot => ({
+  schemaVersion: 3,
+  bootId: 'fixture-boot',
+  snapshotSeq: observedAt,
   profile: 'fixture-web',
   observedAt,
   refreshIntervalMs,
+  overview: {
+    status: 'running', uptimeMs: 1_000,
+    contexts: 1, plugins: 0, fibers: 0, turns: 0,
+    active: 0, effects: 0, events: 0, errors: 0,
+    loaderBreakdown: { total: 0, statuses: { pending: 0, active: 0, disposed: 0, failed: 0 }, byType: [] },
+    fiberBreakdown: { total: 0, statuses: { pending: 0, active: 0, disposed: 0, failed: 0 }, byType: [] },
+    serviceBreakdown: {
+      total: 0, implementations: 0,
+      statuses: { pending: 0, active: 0, disposed: 0, failed: 0 }, byType: [],
+    },
+  },
   graph: { nodes: [], edges: [] },
   trace: [],
+  capabilities: {
+    fiberInstances: false,
+    ownershipEdges: false,
+    scopes: false,
+    lifecycleTransitions: false,
+    turnPluginAttribution: false,
+    eventDispatch: 'none',
+    payloadCapture: false,
+  },
+  limits: { transitionLimit: 0, traceEventLimit: 256 },
 })
 
 afterEach(() => {
@@ -90,5 +114,22 @@ describe('runtime Remote source', () => {
     source.setActive(true)
     await vi.waitFor(() => { expect(source.getSnapshot().error).toBe('runtime snapshot failed') })
     source.setActive(false)
+  })
+
+  it('rejects an unsupported snapshot schema while keeping the last compatible runtime truth', async () => {
+    const report = vi.fn()
+    const unsupported = { ...snapshot(2), schemaVersion: 4 } as unknown as RuntimeExplorerSnapshot
+    const read = vi.fn<() => Promise<RuntimeExplorerSnapshot>>()
+      .mockResolvedValueOnce(snapshot(1))
+      .mockResolvedValueOnce(unsupported)
+    const source = createRuntimeSource(read, report)
+
+    source.refresh()
+    await vi.waitFor(() => { expect(source.getSnapshot().data?.snapshotSeq).toBe(1) })
+    source.refresh()
+    await vi.waitFor(() => { expect(source.getSnapshot().error).toBe('unsupported runtime snapshot schema') })
+
+    expect(source.getSnapshot().data?.snapshotSeq).toBe(1)
+    expect(report).toHaveBeenCalledOnce()
   })
 })

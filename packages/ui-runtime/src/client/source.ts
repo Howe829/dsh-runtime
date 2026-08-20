@@ -3,6 +3,8 @@
 import type { RuntimeExplorerSnapshot } from '@deepseek-ai/dsh-api-remotes/client'
 import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
 
+const SUPPORTED_SCHEMA_VERSION = 3
+
 /** Current browser view of the Host snapshot request lifecycle. */
 export interface RuntimeSourceSnapshot {
   readonly data: RuntimeExplorerSnapshot | undefined
@@ -59,6 +61,12 @@ export function createRuntimeSource(
       inFlight = read().then(
         (data) => {
           if (disposed) return
+          if (data.schemaVersion !== SUPPORTED_SCHEMA_VERSION) {
+            const error = new Error('unsupported runtime snapshot schema')
+            onError(error)
+            publish({ ...snapshot, loading: false, error: error.message })
+            return
+          }
           publish({ data, loading: false, error: undefined })
           schedule(data.refreshIntervalMs)
         },

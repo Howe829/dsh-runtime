@@ -3,7 +3,7 @@ import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client';
 import { type RuntimeLocaleKey } from './locales.ts';
 export type { RuntimeLocaleKey } from './locales.ts';
 export type { RuntimeLifecycleStatus } from './graph.ts';
-export type { RuntimePhaseFilter, RuntimeSelection, RuntimeStoreState, RuntimeTab } from './store.ts';
+export type { RuntimeCategoryFilter, RuntimePhaseFilter, RuntimeSelection, RuntimeStoreState, RuntimeTab } from './store.ts';
 export { createRuntimeStore } from './store.ts';
 declare module '@deepseek-ai/dsh-client-ui-slots' {
     interface LocaleNamespaceMap {

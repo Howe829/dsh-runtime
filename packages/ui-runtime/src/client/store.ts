@@ -2,11 +2,14 @@
 
 import { defineStore, type EngineStoreHandle } from '@deepseek-ai/dsh-client-runtime/client'
 import type { RuntimeLifecycleStatus } from './graph.ts'
+import type { RuntimeG6NodeCategory } from './g6-graph.ts'
 
 /** Explorer tab selected by the user. */
-export type RuntimeTab = 'graph' | 'trace'
+export type RuntimeTab = 'overview' | 'graph' | 'trace'
 /** Client-side filter over the four product-facing lifecycle states. */
 export type RuntimePhaseFilter = RuntimeLifecycleStatus | 'all'
+/** Client-side filter over the inferred DSH plugin roles. */
+export type RuntimeCategoryFilter = Exclude<RuntimeG6NodeCategory, 'missing'> | 'all'
 /** Current graph-node or trace-event inspector selection. */
 export type RuntimeSelection = { kind: 'node' | 'event'; id: string }
 
@@ -16,6 +19,7 @@ export interface RuntimeStoreState {
   tab: RuntimeTab
   query: string
   phase: RuntimePhaseFilter
+  category: RuntimeCategoryFilter
   selection: RuntimeSelection | undefined
   traceTurnKey: string | undefined
   sidebarOffset: number
@@ -26,6 +30,7 @@ type RuntimeStoreActions = {
   setTab: (draft: RuntimeStoreState, tab: RuntimeTab) => void
   setQuery: (draft: RuntimeStoreState, query: string) => void
   setPhase: (draft: RuntimeStoreState, phase: RuntimePhaseFilter) => void
+  setCategory: (draft: RuntimeStoreState, category: RuntimeCategoryFilter) => void
   select: (draft: RuntimeStoreState, selection?: RuntimeSelection) => void
   selectTraceTurn: (draft: RuntimeStoreState, key?: string) => void
   setSidebarOffset: (draft: RuntimeStoreState, px: number) => void
@@ -42,6 +47,7 @@ export function createRuntimeStore(): EngineStoreHandle<RuntimeStoreState, Runti
       tab: 'graph',
       query: '',
       phase: 'all',
+      category: 'all',
       selection: undefined,
       traceTurnKey: undefined,
       sidebarOffset: 0,
@@ -53,6 +59,7 @@ export function createRuntimeStore(): EngineStoreHandle<RuntimeStoreState, Runti
         draft.selection = undefined
         draft.traceTurnKey = undefined
         draft.query = ''
+        draft.category = 'all'
       },
       setQuery: (draft, query: string) => {
         draft.query = query
@@ -60,6 +67,10 @@ export function createRuntimeStore(): EngineStoreHandle<RuntimeStoreState, Runti
       },
       setPhase: (draft, phase: RuntimePhaseFilter) => {
         draft.phase = phase
+        draft.selection = undefined
+      },
+      setCategory: (draft, category: RuntimeCategoryFilter) => {
+        draft.category = category
         draft.selection = undefined
       },
       select: (draft, selection?: RuntimeSelection) => { draft.selection = selection },

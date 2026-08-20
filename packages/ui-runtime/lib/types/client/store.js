@@ -11,6 +11,7 @@ export function createRuntimeStore() {
             tab: 'graph',
             query: '',
             phase: 'all',
+            category: 'all',
             selection: undefined,
             traceTurnKey: undefined,
             sidebarOffset: 0,
@@ -22,6 +23,7 @@ export function createRuntimeStore() {
                 draft.selection = undefined;
                 draft.traceTurnKey = undefined;
                 draft.query = '';
+                draft.category = 'all';
             },
             setQuery: (draft, query) => {
                 draft.query = query;
@@ -29,6 +31,10 @@ export function createRuntimeStore() {
             },
             setPhase: (draft, phase) => {
                 draft.phase = phase;
+                draft.selection = undefined;
+            },
+            setCategory: (draft, category) => {
+                draft.category = category;
                 draft.selection = undefined;
             },
             select: (draft, selection) => { draft.selection = selection; },

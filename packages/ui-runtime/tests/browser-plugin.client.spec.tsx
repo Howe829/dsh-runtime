@@ -14,10 +14,35 @@ import { apply as applyNode } from '../src/index.ts'
 afterEach(cleanup)
 
 const SNAPSHOT = {
+  schemaVersion: 3,
+  bootId: 'fixture-boot',
+  snapshotSeq: 1,
+  profile: 'fixture-web',
   observedAt: 1,
   refreshIntervalMs: 1000,
+  overview: {
+    status: 'running', uptimeMs: 1_000,
+    contexts: 1, plugins: 0, fibers: 0, turns: 0,
+    active: 0, effects: 0, events: 0, errors: 0,
+    loaderBreakdown: { total: 0, statuses: { pending: 0, active: 0, disposed: 0, failed: 0 }, byType: [] },
+    fiberBreakdown: { total: 0, statuses: { pending: 0, active: 0, disposed: 0, failed: 0 }, byType: [] },
+    serviceBreakdown: {
+      total: 0, implementations: 0,
+      statuses: { pending: 0, active: 0, disposed: 0, failed: 0 }, byType: [],
+    },
+  },
   graph: { nodes: [], edges: [] },
   trace: [],
+  capabilities: {
+    fiberInstances: false,
+    ownershipEdges: false,
+    scopes: false,
+    lifecycleTransitions: false,
+    turnPluginAttribution: false,
+    eventDispatch: 'none',
+    payloadCapture: false,
+  },
+  limits: { transitionLimit: 0, traceEventLimit: 256 },
 }
 
 async function bench() {

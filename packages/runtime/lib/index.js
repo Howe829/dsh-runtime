@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import z from "@deepseek-ai/schemastery";
 import { Remote, TypertRemoteService } from "@deepseek-ai/dsh-typert-protocol";
 //#region lib/types/index.js
@@ -43,6 +44,40 @@ var __esDecorate = function(ctor, descriptorIn, decorators, contextIn, initializ
 const DEFAULT_TRACE_LIMIT = 256;
 const DEFAULT_EFFECT_LIMIT = 12;
 const DEFAULT_REFRESH_INTERVAL_MS = 1500;
+const RUNTIME_PROCESS_STATE = Symbol.for("@deepseek-ai/dsh-runtime/process-state");
+const CAPABILITIES = {
+	fiberInstances: false,
+	ownershipEdges: false,
+	scopes: false,
+	lifecycleTransitions: false,
+	turnPluginAttribution: false,
+	eventDispatch: "none",
+	payloadCapture: false
+};
+function runtimeProcessState(ctx) {
+	const root = ctx.root;
+	const current = root[RUNTIME_PROCESS_STATE];
+	if (current !== void 0) return current;
+	const created = {
+		bootId: randomUUID(),
+		snapshotSeq: 0,
+		nextRuntimeId: 0,
+		eventCount: 0,
+		turnCount: 0,
+		errorCount: 0,
+		runtimeIds: /* @__PURE__ */ new WeakMap()
+	};
+	Object.defineProperty(root, RUNTIME_PROCESS_STATE, { value: created });
+	return created;
+}
+function pluginRuntimeId(state, runtime) {
+	if (runtime === null) return void 0;
+	const current = state.runtimeIds.get(runtime);
+	if (current !== void 0) return current;
+	const created = `${state.bootId}:runtime:${++state.nextRuntimeId}`;
+	state.runtimeIds.set(runtime, created);
+	return created;
+}
 /** Runtime mirror: FiberState is a cross-package const enum. */
 const FIBER_STATE = {
 	PENDING: 0,
@@ -61,12 +96,106 @@ const FIBER_PHASE = {
 	[FIBER_STATE.DISPOSED]: null,
 	[FIBER_STATE.UNLOADING]: "unloading"
 };
+const RUNTIME_CATEGORIES = [
+	"core",
+	"agent",
+	"model",
+	"tool",
+	"session",
+	"interface",
+	"extension"
+];
+const STATUS_PRIORITY = {
+	disposed: 0,
+	failed: 1,
+	pending: 2,
+	active: 3
+};
 function shortLabel(moduleName) {
 	const slash = moduleName.lastIndexOf("/");
 	return (slash < 0 ? moduleName : moduleName.slice(slash + 1)).replace(/^dsh-(?:client-ui-|client-|host-)?/, "");
 }
 function entryNodeId(entryId) {
 	return `entry:${entryId}`;
+}
+function lifecycleStatus(state) {
+	if (state === FIBER_STATE.ACTIVE) return "active";
+	if (state === FIBER_STATE.FAILED) return "failed";
+	if (state === FIBER_STATE.DISPOSED) return "disposed";
+	return "pending";
+}
+function phaseStatus(phase) {
+	if (phase === "active") return "active";
+	if (phase === "failed") return "failed";
+	if (phase === null) return "disposed";
+	return "pending";
+}
+/** Infer the same stable product domain used by the browser dependency graph. */
+function runtimePluginCategory(moduleName, label) {
+	const name = `${moduleName} ${label}`.toLowerCase();
+	const short = label.toLowerCase();
+	if (name.includes("cordis") || [
+		"runtime",
+		"loader",
+		"app-boot",
+		"boot",
+		"root"
+	].includes(short)) return "core";
+	if (/^(session|memory|persistence|projection|spill|title)(-|$)/.test(short)) return "session";
+	if (/^(agent|persona|goal|plan|permission|repeat-tool)(-|$)/.test(short)) return "agent";
+	if (/^(llm|model|token)(-|$)/.test(short)) return "model";
+	if (/^(tool|tools|sandbox|attachment|code-runtime|deliverables|modules)(-|$)/.test(short)) return "tool";
+	if (/^(ui|client|web|cmdline|settings|terminal|api-remotes|apiproxy)(-|$)/.test(short)) return "interface";
+	return "extension";
+}
+function emptyStatusCounts() {
+	return {
+		pending: 0,
+		active: 0,
+		disposed: 0,
+		failed: 0
+	};
+}
+function summarizeRuntimeCollection(items) {
+	const statuses = emptyStatusCounts();
+	const categories = /* @__PURE__ */ new Map();
+	for (const item of items) {
+		statuses[item.status] += 1;
+		const counts = categories.get(item.category) ?? emptyStatusCounts();
+		counts[item.status] += 1;
+		categories.set(item.category, counts);
+	}
+	return {
+		total: items.length,
+		statuses,
+		byType: RUNTIME_CATEGORIES.flatMap((category) => {
+			const counts = categories.get(category);
+			if (counts === void 0) return [];
+			return [{
+				category,
+				total: counts.pending + counts.active + counts.disposed + counts.failed,
+				...counts
+			}];
+		})
+	};
+}
+function projectServiceOverview(implementations) {
+	const registered = implementations.filter((implementation) => implementation.fiber.state !== FIBER_STATE.DISPOSED);
+	const services = /* @__PURE__ */ new Map();
+	for (const implementation of registered) {
+		const status = lifecycleStatus(implementation.fiber.state);
+		const moduleName = implementation.fiber.entry?.options.name ?? implementation.fiber.name;
+		const item = {
+			category: runtimePluginCategory(moduleName, shortLabel(moduleName)),
+			status
+		};
+		const current = services.get(implementation.name);
+		if (current === void 0 || STATUS_PRIORITY[item.status] > STATUS_PRIORITY[current.status]) services.set(implementation.name, item);
+	}
+	return {
+		...summarizeRuntimeCollection([...services.values()]),
+		implementations: registered.length
+	};
 }
 function owningEntryId(fiber) {
 	let current = fiber;
@@ -84,6 +213,41 @@ function liveImplementations(ctx) {
 function effectLabels(effects) {
 	return effects.flatMap((effect) => [effect.label, ...effectLabels(effect.children)]);
 }
+/** Project process-lifetime Cordis and Agent counters without exposing payload data. */
+function projectRuntimeOverview(ctx, state, graph) {
+	const fibers = [...ctx.registry.values()].flatMap((runtime) => [...runtime.fibers]);
+	const implementations = liveImplementations(ctx);
+	const loaderBreakdown = summarizeRuntimeCollection(graph.nodes.map((node) => ({
+		category: runtimePluginCategory(node.moduleName, node.label),
+		status: phaseStatus(node.phase)
+	})));
+	const fiberBreakdown = summarizeRuntimeCollection(fibers.map((fiber) => {
+		const moduleName = fiber.entry?.options.name ?? fiber.runtime?.name ?? fiber.name;
+		return {
+			category: runtimePluginCategory(moduleName, shortLabel(moduleName)),
+			status: lifecycleStatus(fiber.state)
+		};
+	}));
+	return {
+		status: "running",
+		uptimeMs: Math.max(0, Math.floor(process.uptime() * 1e3)),
+		contexts: fibers.length + 1,
+		plugins: ctx.registry.size,
+		fibers: fibers.length,
+		turns: state.turnCount,
+		active: fibers.filter((fiber) => fiber.state === FIBER_STATE.ACTIVE).length,
+		effects: graph.nodes.reduce((count, node) => count + node.effectCount, 0),
+		events: state.eventCount,
+		errors: state.errorCount,
+		loaderBreakdown,
+		fiberBreakdown,
+		serviceBreakdown: projectServiceOverview(implementations)
+	};
+}
+function isErrorEvent(event) {
+	if (event.type === "tool/result") return event.data.message.content[0].isError === true;
+	return event.type === "turn/end" && event.data.reason.kind === "error";
+}
 /**
 * Build one dependency graph from the current Loader and service stores.
 * @param ctx - Cordis context that owns Loader, Fiber, and service state.
@@ -91,6 +255,7 @@ function effectLabels(effects) {
 * @returns A point-in-time graph containing non-group Loader entries and service-derived edges.
 */
 function projectRuntimeGraph(ctx, effectLimit) {
+	const processState = runtimeProcessState(ctx);
 	const implementations = liveImplementations(ctx);
 	const providerByService = new Map(implementations.map((impl) => [impl.name, owningEntryId(impl.fiber)]));
 	const providedByEntry = /* @__PURE__ */ new Map();
@@ -127,9 +292,13 @@ function projectRuntimeGraph(ctx, effectLimit) {
 			edgeServices.set(key, edge);
 		}
 		const effects = fiber === void 0 ? [] : effectLabels(fiber.getEffects());
+		const runtimeId = fiber === void 0 ? void 0 : pluginRuntimeId(processState, fiber.runtime);
 		nodes.push({
 			id: source,
+			logicalKey: source,
 			entryId: entry.id,
+			...fiber === void 0 || fiber.uid === null ? {} : { fiberId: `${processState.bootId}:${fiber.uid}` },
+			...runtimeId === void 0 ? {} : { runtimeId },
 			moduleName: entry.options.name,
 			label: shortLabel(entry.options.name),
 			enabled: !entry.disabled,
@@ -144,6 +313,8 @@ function projectRuntimeGraph(ctx, effectLimit) {
 	return {
 		nodes,
 		edges: [...edgeServices.values()].map((edge) => ({
+			id: `injects:${edge.source}->${edge.target}`,
+			type: "injects",
 			source: edge.source,
 			target: edge.target,
 			services: edge.services.sort()
@@ -247,6 +418,10 @@ let RuntimeExplorerGateway = (() => {
 			super(ctx, "runtimeExplorer");
 			this.resolved = config;
 			ctx.on("session/event", (session, event) => {
+				const processState = runtimeProcessState(ctx);
+				processState.eventCount += 1;
+				if (event.type === "turn/start") processState.turnCount += 1;
+				if (isErrorEvent(event)) processState.errorCount += 1;
 				this.trace.push(projectTraceEvent(session, event));
 				const overflow = this.trace.length - this.resolved.traceLimit;
 				if (overflow > 0) this.trace.splice(0, overflow);
@@ -257,15 +432,26 @@ let RuntimeExplorerGateway = (() => {
 		* @returns A point-in-time graph and trace containing no message, model-output, tool-argument, or tool-result content.
 		*/
 		snapshot() {
+			const processState = runtimeProcessState(this.ctx);
+			const graph = projectRuntimeGraph(this.ctx, this.resolved.effectLimit);
 			return {
+				schemaVersion: 3,
+				bootId: processState.bootId,
+				snapshotSeq: ++processState.snapshotSeq,
 				profile: this.ctx.get("launchProfile")?.get() ?? null,
 				observedAt: Date.now(),
 				refreshIntervalMs: this.resolved.refreshIntervalMs,
-				graph: projectRuntimeGraph(this.ctx, this.resolved.effectLimit),
-				trace: [...this.trace]
+				overview: projectRuntimeOverview(this.ctx, processState, graph),
+				graph,
+				trace: [...this.trace],
+				capabilities: CAPABILITIES,
+				limits: {
+					transitionLimit: 0,
+					traceEventLimit: this.resolved.traceLimit
+				}
 			};
 		}
 	};
 })();
 //#endregion
-export { RuntimeExplorerGateway, RuntimeExplorerGateway as default, projectRuntimeGraph, projectTraceEvent };
+export { RuntimeExplorerGateway, RuntimeExplorerGateway as default, projectRuntimeGraph, projectServiceOverview, projectTraceEvent };

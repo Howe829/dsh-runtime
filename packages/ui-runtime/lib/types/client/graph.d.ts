@@ -13,6 +13,14 @@ export interface RuntimeGraphLayout {
     readonly positions: readonly RuntimeNodePosition[];
     readonly byId: ReadonlyMap<string, RuntimeNodePosition>;
 }
+/** Browser-owned placement for one logical plugin node. */
+export interface RuntimeGraphSavedPosition {
+    readonly x: number;
+    readonly y: number;
+    readonly pinned: boolean;
+}
+/** Persisted placements keyed by the Host-provided logical identity. */
+export type RuntimeGraphSavedPositions = Readonly<Record<string, RuntimeGraphSavedPosition>>;
 /** Aggregate plugin lifecycle counts shown above the runtime graph. */
 export interface RuntimeGraphSummary {
     readonly pending: number;
@@ -25,6 +33,8 @@ export interface RuntimeGraphFocus {
     readonly nodes: readonly RuntimeGraphNode[];
     readonly edges: readonly RuntimeGraphEdge[];
 }
+/** Maximum undirected relation distance retained around a selected plugin. */
+export type RuntimeGraphNeighbourDepth = 1 | 2 | 'all';
 /** How one visible node or edge relates to the current focus node. */
 export type RuntimeGraphRelation = 'selected' | 'dependency' | 'dependant' | 'both' | 'related';
 /** Directional relationship index for a focused runtime graph. */
@@ -35,13 +45,14 @@ export interface RuntimeGraphRelations {
 /** Product-facing lifecycle states collapsed from the Loader Fiber phases. */
 export type RuntimeLifecycleStatus = 'pending' | 'active' | 'disposed' | 'failed';
 /**
- * Keep the complete upstream and downstream dependency chain around one selected node.
+ * Keep the requested upstream and downstream neighbourhood around one selected node.
  * @param nodes - Graph nodes after search and lifecycle filtering.
  * @param edges - Dependency edges joining the filtered nodes.
  * @param selectedId - Selected node id, or undefined for the complete graph.
- * @returns The selected node's weakly connected dependency component in stable input order.
+ * @param depth - Maximum relationship distance; one hop matches the default graph interaction.
+ * @returns The selected node's bounded weakly connected neighbourhood in stable input order.
  */
-export declare function focusRuntimeGraph(nodes: readonly RuntimeGraphNode[], edges: readonly RuntimeGraphEdge[], selectedId: string | undefined): RuntimeGraphFocus;
+export declare function focusRuntimeGraph(nodes: readonly RuntimeGraphNode[], edges: readonly RuntimeGraphEdge[], selectedId: string | undefined, depth?: RuntimeGraphNeighbourDepth): RuntimeGraphFocus;
 /**
  * Classify the selected plugin's transitive dependencies and dependants.
  * Runtime edges point from a consumer (`source`) to its provider (`target`).
@@ -51,13 +62,17 @@ export declare function focusRuntimeGraph(nodes: readonly RuntimeGraphNode[], ed
  * @returns Stable node and edge relation maps used by graph styling and the legend.
  */
 export declare function runtimeGraphRelations(nodes: readonly RuntimeGraphNode[], edges: readonly RuntimeGraphEdge[], selectedId: string | undefined): RuntimeGraphRelations;
+/** Stable topology identity that deliberately excludes lifecycle state. */
+export declare function runtimeGraphTopologyKey(nodes: readonly RuntimeGraphNode[], edges: readonly RuntimeGraphEdge[]): string;
 /**
- * Place providers before their consumers; dependency cycles share a column.
+ * Settle a deterministic, bounded force-directed graph.
+ * Saved positions seed the simulation; pinned positions remain fixed.
  * @param nodes - Visible runtime nodes after Client filtering.
  * @param edges - Visible dependency edges joining those nodes.
+ * @param saved - Browser-owned placements keyed by logical identity.
  * @returns Stable SVG dimensions and positions for every input node.
  */
-export declare function layoutRuntimeGraph(nodes: readonly RuntimeGraphNode[], edges: readonly RuntimeGraphEdge[]): RuntimeGraphLayout;
+export declare function layoutRuntimeGraph(nodes: readonly RuntimeGraphNode[], edges: readonly RuntimeGraphEdge[], saved?: RuntimeGraphSavedPositions): RuntimeGraphLayout;
 /**
  * Collapse detailed Loader Fiber phases into the four product-facing states.
  * @param phase - Detailed phase projected by the Host, or null without a live Fiber.
@@ -70,8 +85,10 @@ export declare function runtimeLifecycleStatus(phase: RuntimeGraphNode['phase'])
  * @returns Stable totals for the graph overview cards.
  */
 export declare function summarizeRuntimeGraph(nodes: readonly RuntimeGraphNode[]): RuntimeGraphSummary;
-/** Width reserved for every runtime graph node. */
-export declare const RUNTIME_NODE_WIDTH = 210;
-/** Height reserved for every runtime graph node. */
-export declare const RUNTIME_NODE_HEIGHT = 72;
+/** Width reserved for every circular runtime graph node. */
+export declare const RUNTIME_NODE_WIDTH = 116;
+/** Height reserved for every circular runtime graph node. */
+export declare const RUNTIME_NODE_HEIGHT = 116;
+/** Radius of the circular runtime graph node. */
+export declare const RUNTIME_NODE_RADIUS: number;
 //# sourceMappingURL=graph.d.ts.map
