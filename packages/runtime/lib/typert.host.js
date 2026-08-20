@@ -2,7 +2,7 @@
 import { z } from 'zod'
 
 const _deepseek_ai_dsh_runtime_runtimeExplorer_snapshot_result$schema = z.object({
-  'schemaVersion': z.literal(3).readonly(),
+  'schemaVersion': z.literal(5).readonly(),
   'bootId': z.string().readonly(),
   'snapshotSeq': z.number().readonly(),
   'profile': z.union([z.literal(null), z.string()]).readonly(),
@@ -72,6 +72,47 @@ const _deepseek_ai_dsh_runtime_runtimeExplorer_snapshot_result$schema = z.object
 })).readonly(),
 }).readonly(),
 }).readonly(),
+  'effectActivity': z.object({
+  'windowMs': z.number().readonly(),
+  'availableSince': z.number().readonly(),
+  'complete': z.boolean().readonly(),
+  'droppedTransitions': z.number().readonly(),
+  'current': z.number().readonly(),
+  'created': z.number().readonly(),
+  'disposed': z.number().readonly(),
+  'delta': z.number().readonly(),
+  'churn': z.number().readonly(),
+  'plugins': z.array(z.object({
+  'pluginId': z.string().readonly(),
+  'entryId': z.string().readonly(),
+  'moduleName': z.string().readonly(),
+  'label': z.string().readonly(),
+  'current': z.number().readonly(),
+  'created': z.number().readonly(),
+  'disposed': z.number().readonly(),
+  'delta': z.number().readonly(),
+  'churn': z.number().readonly(),
+  'trend': z.array(z.object({
+  'time': z.number().readonly(),
+  'current': z.number().readonly(),
+  'created': z.number().readonly(),
+  'disposed': z.number().readonly(),
+})).readonly(),
+})).readonly(),
+  'recent': z.array(z.object({
+  'id': z.string().readonly(),
+  'effectId': z.string().readonly(),
+  'action': z.union([z.literal("created"), z.literal("disposed")]).readonly(),
+  'time': z.number().readonly(),
+  'pluginId': z.string().readonly(),
+  'entryId': z.string().readonly(),
+  'moduleName': z.string().readonly(),
+  'pluginLabel': z.string().readonly(),
+  'fiberId': z.string().readonly().optional(),
+  'effectLabel': z.string().readonly(),
+  'durationMs': z.number().readonly().optional(),
+})).readonly(),
+}).readonly(),
   'graph': z.object({
   'nodes': z.array(z.object({
   'id': z.string().readonly(),
@@ -95,6 +136,21 @@ const _deepseek_ai_dsh_runtime_runtimeExplorer_snapshot_result$schema = z.object
   'source': z.string().readonly(),
   'target': z.string().readonly(),
   'services': z.array(z.string()).readonly(),
+})).readonly(),
+  'services': z.array(z.object({
+  'id': z.string().readonly(),
+  'name': z.string().readonly(),
+  'providerNodeId': z.string().readonly().optional(),
+  'providerEntryId': z.string().readonly().optional(),
+  'providerFiberId': z.string().readonly().optional(),
+  'phase': z.union([z.literal(null), z.literal("failed"), z.literal("pending"), z.literal("active"), z.literal("loading"), z.literal("unloading")]).readonly(),
+})).readonly(),
+  'serviceRelations': z.array(z.object({
+  'id': z.string().readonly(),
+  'serviceNodeId': z.string().readonly(),
+  'service': z.string().readonly(),
+  'consumerNodeId': z.string().readonly(),
+  'providerNodeId': z.string().readonly().optional(),
 })).readonly(),
 }).readonly(),
   'trace': z.array(z.object({
@@ -145,7 +201,7 @@ export const TYPERT = {
         typeSymbol: '@deepseek-ai/dsh-runtime/types#RuntimeExplorerSnapshot',
         schema: _deepseek_ai_dsh_runtime_runtimeExplorer_snapshot_result$schema,
       },
-      sourceLocation: {"file":"packages/extensions/runtime/src/index.ts","line":431,"column":3},
+      sourceLocation: {"file":"packages/extensions/runtime/src/index.ts","line":701,"column":3},
     },
   ],
   model: {

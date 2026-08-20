@@ -5,6 +5,7 @@ import { provideCmdline } from '@deepseek-ai/dsh-cmdline'
 import { Session, SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
 import { remoteMethods } from '@deepseek-ai/dsh-typert-protocol'
 import RuntimeExplorerGateway, {
+  type Config,
   projectRuntimeGraph, projectServiceOverview, projectTraceEvent,
 } from '../src/index.ts'
 
@@ -41,10 +42,22 @@ const pending: Plugin.Object = {
   apply() {},
 }
 
+const rootServiceConsumer: Plugin.Object = {
+  inject: ['loader'],
+  apply() {},
+}
+
 const unusedGroup: Plugin.Function = () => {}
 
 async function harness(
-  config = { traceLimit: 2, effectLimit: 1, refreshIntervalMs: 900 },
+  config: Config = {
+    traceLimit: 2,
+    effectLimit: 1,
+    refreshIntervalMs: 900,
+    activityWindowMs: 300_000,
+    activityBucketMs: 10_000,
+    activityTransitionLimit: 64,
+  },
   profile: string | null = 'fixture-profile',
 ) {
   const ctx = new Context()
@@ -54,6 +67,7 @@ async function harness(
   ctx.loader.builtins.provider = provider
   ctx.loader.builtins.consumer = consumer
   ctx.loader.builtins.pending = pending
+  ctx.loader.builtins['root-service-consumer'] = rootServiceConsumer
   ctx.loader.builtins['unused-group'] = unusedGroup
   await ctx.plugin(RuntimeExplorerGateway, config)
   const runtime = ctx.get('runtimeExplorer') as RuntimeExplorerGateway
@@ -101,12 +115,25 @@ describe('RuntimeExplorerGateway', () => {
       target: `entry:${providerEntry}`,
       services: ['alpha', 'beta'],
     }])
+    expect(graph.services.map(service => service.name)).toEqual(expect.arrayContaining(['alpha', 'beta']))
+    expect(graph.serviceRelations).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        service: 'alpha',
+        consumerNodeId: `entry:${consumerEntry}`,
+        providerNodeId: `entry:${providerEntry}`,
+      }),
+      expect.objectContaining({
+        service: 'beta',
+        consumerNodeId: `entry:${consumerEntry}`,
+        providerNodeId: `entry:${providerEntry}`,
+      }),
+    ]))
     expect(graph.edges.some(edge => edge.source === `entry:${providerEntry}` && edge.target === `entry:${providerEntry}`)).toBe(false)
 
     const firstSnapshot = runtime.snapshot()
     const secondSnapshot = runtime.snapshot()
     expect(firstSnapshot).toMatchObject({
-      schemaVersion: 3,
+      schemaVersion: 5,
       bootId: expect.any(String),
       snapshotSeq: 1,
       profile: 'fixture-profile',
@@ -129,12 +156,12 @@ describe('RuntimeExplorerGateway', () => {
         fiberInstances: false,
         ownershipEdges: false,
         scopes: false,
-        lifecycleTransitions: false,
+        lifecycleTransitions: true,
         turnPluginAttribution: false,
         eventDispatch: 'none',
         payloadCapture: false,
       },
-      limits: { transitionLimit: 0, traceEventLimit: 2 },
+      limits: { transitionLimit: 64, traceEventLimit: 2 },
     })
     expect(secondSnapshot.bootId).toBe(firstSnapshot.bootId)
     expect(secondSnapshot.snapshotSeq).toBe(2)
@@ -145,6 +172,9 @@ describe('RuntimeExplorerGateway', () => {
       statuses: { pending: 1, active: 2, disposed: 1, failed: 0 },
     })
     expect(firstSnapshot.overview.fiberBreakdown.total).toBe(firstSnapshot.overview.fibers)
+    expect(firstSnapshot.overview.effects).toBe(
+      firstSnapshot.effectActivity.plugins.reduce((sum, plugin) => sum + plugin.current, 0),
+    )
     expect(firstSnapshot.overview.serviceBreakdown.implementations)
       .toBeGreaterThanOrEqual(firstSnapshot.overview.serviceBreakdown.total)
     for (const breakdown of [
@@ -156,6 +186,122 @@ describe('RuntimeExplorerGateway', () => {
       expect(breakdown.byType.reduce((sum, row) => sum + row.total, 0)).toBe(breakdown.total)
     }
     expect(remoteMethods(runtime)).toEqual([{ method: 'snapshot', invocation: { kind: 'direct' } }])
+  })
+
+  it('keeps same-name services in different Loader isolation realms bound to their exact providers', async () => {
+    const { ctx } = await harness()
+    ctx.loader.builtins['alpha-provider'] = (pluginCtx: Context) => { new AlphaService(pluginCtx) }
+    ctx.loader.builtins['alpha-consumer'] = {
+      inject: ['alpha'], apply(pluginCtx: Context) { pluginCtx.effect(() => () => {}, 'alpha-consumer') },
+    }
+    const providerA = await ctx.loader.create({ name: 'cordis:alpha-provider', isolate: { alpha: 'realm-a' } })
+    const consumerA = await ctx.loader.create({ name: 'cordis:alpha-consumer', isolate: { alpha: 'realm-a' } })
+    const providerB = await ctx.loader.create({ name: 'cordis:alpha-provider', isolate: { alpha: 'realm-b' } })
+    const consumerB = await ctx.loader.create({ name: 'cordis:alpha-consumer', isolate: { alpha: 'realm-b' } })
+    await ctx.loader.await()
+
+    const graph = projectRuntimeGraph(ctx, 1)
+    const alphaRelations = graph.serviceRelations.filter(relation => relation.service === 'alpha')
+    const relationA = alphaRelations.find(relation => relation.consumerNodeId === `entry:${consumerA}`)
+    const relationB = alphaRelations.find(relation => relation.consumerNodeId === `entry:${consumerB}`)
+
+    expect(relationA).toMatchObject({ providerNodeId: `entry:${providerA}` })
+    expect(relationB).toMatchObject({ providerNodeId: `entry:${providerB}` })
+    expect(relationA?.serviceNodeId).not.toBe(relationB?.serviceNodeId)
+    expect(graph.services.filter(service => service.name === 'alpha')).toEqual(expect.arrayContaining([
+      expect.objectContaining({ providerEntryId: providerA }),
+      expect.objectContaining({ providerEntryId: providerB }),
+    ]))
+  })
+
+  it('projects root Context services without reporting active consumers as missing dependencies', async () => {
+    const { ctx } = await harness()
+    const consumerEntry = await ctx.loader.create({ name: 'cordis:root-service-consumer' })
+    await ctx.loader.await()
+
+    const graph = projectRuntimeGraph(ctx, 1)
+    const loaderService = graph.services.find(service => service.name === 'loader')
+    const consumerNode = graph.nodes.find(node => node.entryId === consumerEntry)
+    const relation = graph.serviceRelations.find(item => (
+      item.consumerNodeId === `entry:${consumerEntry}` && item.service === 'loader'
+    ))
+
+    expect(consumerNode).toMatchObject({ phase: 'active', injects: ['loader'], missing: [] })
+    expect(loaderService).toMatchObject({ name: 'loader', phase: 'active' })
+    expect(loaderService).not.toHaveProperty('providerEntryId')
+    expect(loaderService).not.toHaveProperty('providerNodeId')
+    expect(relation).toMatchObject({
+      serviceNodeId: loaderService?.id,
+      service: 'loader',
+      consumerNodeId: `entry:${consumerEntry}`,
+    })
+    expect(relation).not.toHaveProperty('providerNodeId')
+  })
+
+  it('models Effect Current, Delta, Churn, trend, and recent lifecycle rows per plugin', async () => {
+    const { ctx, runtime } = await harness()
+    const providerEntry = await ctx.loader.create({ name: 'cordis:provider' })
+    await ctx.loader.await()
+    const providerFiber = [...ctx.loader.entries()].find(entry => entry.id === providerEntry)!.fiber!
+    const pluginId = `entry:${providerEntry}`
+    let childContext: Context | undefined
+    await providerFiber.ctx.plugin((ctx) => { childContext = ctx })
+    childContext!.effect(() => () => {}, 'child-baseline-effect')
+    const before = runtime.snapshot().effectActivity.plugins.find(plugin => plugin.pluginId === pluginId)!
+    const rootEffectCount = runtime.snapshot().graph.nodes.find(node => node.entryId === providerEntry)!.effectCount
+    expect(before.current).toBeGreaterThan(rootEffectCount)
+
+    const dispose = childContext!.effect(() => () => {}, 'activity-probe')
+    const created = runtime.snapshot().effectActivity
+    const afterCreate = created.plugins.find(plugin => plugin.pluginId === pluginId)!
+    expect(afterCreate).toMatchObject({
+      current: before.current + 1,
+      created: before.created + 1,
+      disposed: before.disposed,
+      delta: before.delta + 1,
+      churn: before.churn + 1,
+    })
+    expect(afterCreate.trend.at(-1)?.current).toBe(afterCreate.current)
+    expect(created.recent[0]).toMatchObject({
+      action: 'created', pluginId, effectLabel: 'activity-probe', fiberId: expect.any(String),
+    })
+
+    await dispose()
+    const disposed = runtime.snapshot().effectActivity
+    const afterDispose = disposed.plugins.find(plugin => plugin.pluginId === pluginId)!
+    expect(afterDispose).toMatchObject({
+      current: before.current,
+      created: before.created + 1,
+      disposed: before.disposed + 1,
+      delta: before.delta,
+      churn: before.churn + 2,
+    })
+    expect(disposed.recent[0]).toMatchObject({
+      action: 'disposed', pluginId, effectLabel: 'activity-probe', durationMs: expect.any(Number),
+    })
+  })
+
+  it('marks the visible activity window incomplete when lifecycle history overflows', async () => {
+    const { ctx, runtime } = await harness({
+      traceLimit: 2,
+      effectLimit: 1,
+      refreshIntervalMs: 900,
+      activityWindowMs: 300_000,
+      activityBucketMs: 10_000,
+      activityTransitionLimit: 1,
+    })
+    const providerEntry = await ctx.loader.create({ name: 'cordis:provider' })
+    await ctx.loader.await()
+    const providerFiber = [...ctx.loader.entries()].find(entry => entry.id === providerEntry)!.fiber!
+    const dispose = providerFiber.ctx.effect(() => () => {}, 'overflow-probe')
+    await dispose()
+
+    expect(runtime.snapshot().effectActivity).toMatchObject({
+      complete: false,
+      droppedTransitions: expect.any(Number),
+      recent: [expect.objectContaining({ action: 'disposed', effectLabel: 'overflow-probe' })],
+    })
+    expect(runtime.snapshot().effectActivity.droppedTransitions).toBeGreaterThan(0)
   })
 
   it('reports service registration separately from provider Fiber health', () => {

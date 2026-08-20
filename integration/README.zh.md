@@ -11,6 +11,9 @@
 6. 若顶部需要显示准确的当前 Profile，通过可选的 `launchProfile` Cordis
    service 提供启动 Profile。
 7. 将两个包的工程引用和源码别名加入 Host/Client TypeScript 聚合配置。
+8. 使用能够发出类型化 `internal/effect` 创建/释放生命周期事件的 Cordis 构建。
+   缺少该插桩时，实时 Effect 总数仍可读取，但窗口活动指标（创建、释放、净变化和
+   Churn）不可用。
 
 缺少 `launchProfile` 时插件仍可运行，只是不显示 Profile 标签；Remote 挂载则是
 快照和请求追踪正常工作的必要条件。

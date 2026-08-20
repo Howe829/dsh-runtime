@@ -14,6 +14,10 @@ commit `141eb6fef8`.
    Cordis service if the header should display the exact active profile.
 7. Add both package projects and their source aliases to the Host/Client
    TypeScript aggregate configs.
+8. Use a Cordis build that emits the typed `internal/effect` create/dispose
+   lifecycle event. Without this instrumentation, live Effect totals remain
+   readable but window activity (`Created`, `Disposed`, `Delta`, and `Churn`)
+   is unavailable.
 
 The plugin remains usable when `launchProfile` is absent; the profile badge is
 simply omitted. The Remote mount is required for snapshots and tracing.

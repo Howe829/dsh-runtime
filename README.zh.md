@@ -2,7 +2,8 @@
 
 `dsh-runtime` 是 DeepSeek Harness 的只读 Runtime Explorer，由两个 DSH
 插件包组成：Host 侧负责投影 Cordis 运行时状态和隐私安全的 Session 事件元数据，
-Web 侧负责渲染插件依赖图与请求追踪。
+Web 侧负责渲染插件依赖图与请求追踪。总览还会按插件显示 Effect 的当前数量、
+净变化、生命周期活跃度、趋势和有界的最近转换记录。
 
 ## 包结构
 

@@ -3,6 +3,7 @@ import { runtimeLifecycleStatus } from "./graph.js";
 const MIN_PLUGIN_SIZE = 76;
 const MAX_PLUGIN_SIZE = 108;
 const MISSING_SERVICE_SIZE = 58;
+const SERVICE_SIZE = 72;
 export const RUNTIME_G6_COLLISION_GAP = 24;
 /**
  * Infer a stable, explainable visual category from DSH package conventions.
@@ -26,18 +27,28 @@ export function runtimeG6NodeCategory(moduleName, label) {
     return 'extension';
 }
 /** Keep the exact plugin name while preferring semantic line breaks inside circles. */
-export function runtimeG6DisplayLabel(label) {
-    if (label.length <= 12 || !label.includes('-'))
+export function runtimeG6DisplayLabel(label, maxLineLength = 13) {
+    if (label.length <= maxLineLength)
         return label;
-    const parts = label.split('-').filter(Boolean);
-    if (parts.length < 2)
-        return label;
-    const tokens = parts.map((part, index) => index === parts.length - 1 ? part : `${part}-`);
+    const semanticTokens = label
+        .replace(/([a-z0-9])([A-Z])/g, '$1\u0000$2')
+        .replace(/([-_.:/])/g, '$1\u0000')
+        .split('\u0000')
+        .filter(Boolean);
+    const tokens = semanticTokens.flatMap((token) => {
+        if (token.length <= maxLineLength)
+            return [token];
+        const chunks = [];
+        for (let offset = 0; offset < token.length; offset += maxLineLength) {
+            chunks.push(token.slice(offset, offset + maxLineLength));
+        }
+        return chunks;
+    });
     const lines = [];
     let current = '';
     for (const token of tokens) {
         const candidate = `${current}${token}`;
-        if (current !== '' && candidate.length > 13 && lines.length < 2) {
+        if (current !== '' && candidate.length > maxLineLength) {
             lines.push(current);
             current = token;
         }
@@ -71,7 +82,9 @@ export function runtimeG6EdgeMetadata(edge) {
  * Project the Host graph into G6 data while keeping product state out of the renderer.
  * Missing Cordis providers become explicit satellite nodes only around the selected plugin.
  */
-export function buildRuntimeG6Data(nodes, edges, relations, selectedId, savedPositions) {
+export function buildRuntimeG6Data(nodes, edges, services, serviceRelations, relations, focus, savedPositions, showAllServices = false) {
+    const selectedPluginId = focus?.kind === 'plugin' ? focus.id : undefined;
+    const selectedServiceId = focus?.kind === 'service' ? focus.id : undefined;
     const degree = new Map();
     const nodeIds = new Set(nodes.map(node => node.id));
     const validEdges = edges.filter(edge => nodeIds.has(edge.source) && nodeIds.has(edge.target));
@@ -81,7 +94,7 @@ export function buildRuntimeG6Data(nodes, edges, relations, selectedId, savedPos
     }
     const projectedNodes = nodes.map((node) => {
         const saved = savedPositions[node.logicalKey];
-        const size = runtimeG6NodeSize(degree.get(node.id) ?? 0, node.id === selectedId, node.label);
+        const size = runtimeG6NodeSize(degree.get(node.id) ?? 0, node.id === selectedPluginId, node.label);
         const relation = relations.nodes.get(node.id);
         const metadata = {
             kind: 'plugin',
@@ -103,24 +116,113 @@ export function buildRuntimeG6Data(nodes, edges, relations, selectedId, savedPos
             size,
             data: metadata,
             ...(saved === undefined ? {} : { style: { x: saved.x, y: saved.y } }),
-            states: node.id === selectedId ? ['selected'] : [],
+            states: node.id === selectedPluginId ? ['selected'] : [],
         };
     });
-    const projectedEdges = validEdges.map((edge) => {
+    const focusedServiceRelations = focus === undefined
+        ? []
+        : serviceRelations.filter(relation => ((focus.kind === 'service'
+            ? relation.serviceNodeId === focus.id
+            : relation.consumerNodeId === focus.id || relation.providerNodeId === focus.id)
+            && nodeIds.has(relation.consumerNodeId)
+            && (relation.providerNodeId === undefined || nodeIds.has(relation.providerNodeId))));
+    const expandedPluginEdges = new Set(focusedServiceRelations.flatMap(relation => relation.providerNodeId === undefined
+        ? []
+        : [`${relation.consumerNodeId}\u0000${relation.providerNodeId}`]));
+    const projectedEdges = validEdges.flatMap((edge) => {
+        if (expandedPluginEdges.has(`${edge.source}\u0000${edge.target}`))
+            return [];
         const relation = relations.edges.get(`${edge.source}:${edge.target}`);
-        return {
-            id: edge.id,
-            source: edge.source,
-            target: edge.target,
+        return [{
+                id: edge.id,
+                source: edge.source,
+                target: edge.target,
+                data: {
+                    kind: 'injects',
+                    ...(relation === undefined ? {} : { relation }),
+                    services: [...edge.services],
+                },
+            }];
+    });
+    const serviceById = new Map(services.map(service => [service.id, service]));
+    const visibleServiceIds = new Set(showAllServices
+        ? services.map(service => service.id)
+        : focusedServiceRelations.map(relation => relation.serviceNodeId));
+    const consumerCounts = new Map();
+    for (const relation of serviceRelations) {
+        consumerCounts.set(relation.serviceNodeId, (consumerCounts.get(relation.serviceNodeId) ?? 0) + 1);
+    }
+    for (const serviceId of visibleServiceIds) {
+        const service = serviceById.get(serviceId);
+        if (service === undefined)
+            continue;
+        const id = `service:${service.id}`;
+        const serviceSelected = service.id === selectedServiceId;
+        const relation = serviceSelected
+            ? 'selected'
+            : focus?.kind === 'plugin'
+                ? service.providerNodeId !== undefined && service.providerNodeId === selectedPluginId
+                    ? 'dependant'
+                    : 'dependency'
+                : undefined;
+        projectedNodes.push({
+            id,
+            size: SERVICE_SIZE + (serviceSelected ? 8 : 0),
+            data: {
+                kind: 'service',
+                label: service.name,
+                phase: runtimeLifecycleStatus(service.phase),
+                category: 'service',
+                ...(relation === undefined ? {} : { relation }),
+                size: SERVICE_SIZE + (serviceSelected ? 8 : 0),
+                pinned: false,
+                provides: [],
+                injects: [],
+                missing: [],
+                effectCount: 0,
+                service: service.name,
+                ...(service.providerNodeId === undefined ? {} : { providerNodeId: service.providerNodeId }),
+                ...(service.providerEntryId === undefined ? {} : { providerEntryId: service.providerEntryId }),
+                consumerCount: consumerCounts.get(service.id) ?? 0,
+            },
+            states: serviceSelected ? ['selected'] : [],
+        });
+        if (service.providerNodeId !== undefined && nodeIds.has(service.providerNodeId)) {
+            projectedEdges.push({
+                id: `provides:${service.providerNodeId}->${service.id}`,
+                source: service.providerNodeId,
+                target: id,
+                data: {
+                    kind: 'provides',
+                    relation: selectedServiceId !== undefined
+                        ? 'dependency'
+                        : service.providerNodeId === selectedPluginId ? 'dependant' : 'dependency',
+                    services: [service.name],
+                },
+            });
+        }
+    }
+    for (const relation of focusedServiceRelations) {
+        if (!nodeIds.has(relation.consumerNodeId))
+            continue;
+        projectedEdges.push({
+            id: `injects:${relation.consumerNodeId}->${relation.serviceNodeId}`,
+            source: relation.consumerNodeId,
+            target: `service:${relation.serviceNodeId}`,
             data: {
                 kind: 'injects',
-                ...(relation === undefined ? {} : { relation }),
-                services: [...edge.services],
+                relation: selectedServiceId !== undefined
+                    ? 'dependant'
+                    : relation.consumerNodeId === selectedPluginId ? 'dependency' : 'dependant',
+                services: [relation.service],
             },
-        };
-    });
-    const selected = selectedId === undefined ? undefined : nodes.find(node => node.id === selectedId);
+        });
+    }
+    const selected = selectedPluginId === undefined ? undefined : nodes.find(node => node.id === selectedPluginId);
     for (const [index, service] of (selected?.missing ?? []).entries()) {
+        const selectedId = selected?.id;
+        if (selectedId === undefined)
+            continue;
         const id = `missing:${selectedId}:${service}`;
         projectedNodes.push({
             id,
@@ -153,6 +255,10 @@ export function buildRuntimeG6Data(nodes, edges, relations, selectedId, savedPos
         });
     }
     return { nodes: projectedNodes, edges: projectedEdges };
+}
+/** Count concrete scoped Service nodes currently materialized in focus mode. */
+export function runtimeG6VisibleServiceCount(data) {
+    return data.nodes.filter(node => runtimeG6NodeMetadata(node).kind === 'service').length;
 }
 /** Topology identity used to distinguish live status refreshes from structural changes. */
 export function runtimeG6TopologyKey(data) {

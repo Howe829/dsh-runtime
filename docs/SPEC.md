@@ -1,6 +1,6 @@
 # dsh-runtime Product and Engineering Specification
 
-Status: Draft v0.2  
+Status: Draft v0.3
 Audience: dsh-runtime maintainers, DeepSeek Harness contributors, and reviewers  
 Primary product: an Obsidian-style live network graph of DSH plugins  
 
@@ -34,6 +34,8 @@ The product should let a user:
    attribution is available.
 9. Inspect the runtime without capturing prompts, model outputs, tool arguments,
    tool results, credentials, or other payload content.
+10. Detect Effect growth and lifecycle churn per plugin without turning Effects
+    into graph nodes.
 
 ## 3. Non-goals
 
@@ -65,7 +67,7 @@ The product maps Cordis concepts as follows:
 | `ctx.plugin(child)` | Owner-to-child `mounts` edge |
 | Context / Scope | Graph grouping, breadcrumb, or filter |
 | Fiber lifecycle | Node status and appearance |
-| Effect | Selected-node detail, not a default graph node |
+| Effect | Overview activity and selected-plugin detail, not a graph node |
 | Event | Optional runtime activity overlay or trace data |
 | Agent Turn | Separate timeline plus an optional active-path overlay |
 
@@ -375,6 +377,8 @@ interface RuntimeExplorerSnapshot {
     edges: RuntimePluginEdge[]
   }
 
+  effectActivity: RuntimeEffectActivitySnapshot
+
   transitions: FiberStateTransition[]
   trace: RuntimeTraceEvent[]
 
@@ -443,7 +447,8 @@ The MVP does not persist the following across Harness restarts:
 - runtime dependency topology;
 - lifecycle transition history;
 - Agent Turn trace events;
-- errors or effect metadata.
+- errors or effect metadata;
+- Effect lifecycle activity and recent transition metadata.
 
 Transitions and trace events are kept in bounded in-process ring buffers. A new
 `bootId` starts a new observation window.
@@ -525,6 +530,55 @@ interface FiberStateTransition {
 A reason must be omitted or marked unknown when instrumentation cannot prove it.
 The UI must not infer HMR, explicit disposal, parent disposal, configuration
 disablement, or dependency restoration from timing alone.
+
+### 14.1 Effect activity model
+
+Effect observability is grouped by the owning Loader plugin. Effects created by
+non-Loader child Fibers are attributed to the nearest ancestor Loader entry, so
+the plugin total represents the complete live subtree rather than only the
+entry's root Fiber.
+
+For each plugin the runtime projects:
+
+```ts
+interface RuntimePluginEffectActivity {
+  pluginId: string
+  current: number
+  created: number
+  disposed: number
+  delta: number
+  churn: number
+  trend: Array<{
+    time: number
+    current: number
+    created: number
+    disposed: number
+  }>
+}
+```
+
+The metrics have distinct meanings:
+
+- `current` is the point-in-time number of live Effects, reconciled from all
+  current Fibers owned by the plugin;
+- `created` and `disposed` are lifecycle transitions observed inside the
+  configured activity window;
+- `delta = created - disposed` is the net change inside that window;
+- `churn = created + disposed` measures lifecycle activity even when net change
+  is zero;
+- `trend` is the bucketed reconstruction of current Effect count over the
+  retained window.
+
+The overview shows a compact Plugin Activity list with `current`, `delta`,
+`churn`, and a sparkline. Selecting a row opens the plugin's detailed metrics,
+window trend, and bounded recent Effect transitions.
+
+Activity history begins when the runtime gateway becomes active. It is
+process-local, bounded by both time and transition count, and is cleared on a
+new `bootId`. If the count bound truncates transitions still inside the visible
+window, the snapshot must mark the window incomplete and the UI must disclose
+that limitation. `Current` remains authoritative even when history is
+incomplete; derived window metrics do not.
 
 ## 15. Instrumentation boundary
 
@@ -608,6 +662,8 @@ The MVP is an evolution of the current implementation, not a rewrite.
 11. Snapshot identity includes schema, process boot, and sequence information.
 12. Runtime data and trace history remain bounded and non-persistent.
 13. Payload content remains structurally excluded.
+14. The overview exposes per-plugin Effect `current`, `delta`, `churn`, and
+    trend, with a drill-down into recent lifecycle transitions.
 
 ### After MVP
 
@@ -656,6 +712,13 @@ The MVP is an evolution of the current implementation, not a rewrite.
 - add configurable neighbour depth;
 - cross-link a trace event or Turn to a graph node only when attribution is
   supported.
+
+### Phase 6: Effect activity
+
+- capture typed Cordis Effect create/dispose lifecycle metadata;
+- reconcile current counts from every owned Fiber on each snapshot;
+- expose bounded per-plugin activity windows and overflow completeness;
+- render Plugin Activity overview and selected-plugin detail.
 
 ## 20. Acceptance criteria
 
@@ -717,6 +780,19 @@ truth from a new snapshot and does not restore old Fiber states or trace events.
 Automated tests must demonstrate that snapshot and trace serialization exclude
 message content, model content, tool arguments, tool results, and failure text.
 
+### 20.7 Effect activity
+
+Given a plugin with one Effect created and then disposed inside the activity
+window:
+
+- `created` increases by one after creation;
+- `current` and `delta` increase by one while the Effect is live;
+- after disposal, `current` and `delta` return to their prior values;
+- `disposed` increases by one and `churn` increases by two;
+- the recent list records both transitions without payload content;
+- an Effect owned by a child Fiber contributes to the nearest Loader plugin;
+- overflow marks the activity window incomplete without corrupting `current`.
+
 ## 21. Current baseline and migration rule
 
 The current implementation already provides:
@@ -727,6 +803,7 @@ The current implementation already provides:
 - four product-facing lifecycle summaries and filters;
 - node focus, pan, zoom, fit, and refresh-stable viewport;
 - metadata-only Session and Agent Turn trace;
+- per-plugin Effect Current, Delta, Churn, trend, and recent transitions;
 - an existing typed Remote snapshot carrier.
 
 This work is retained. The implementation should migrate incrementally toward

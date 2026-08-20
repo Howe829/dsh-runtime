@@ -3,7 +3,8 @@
 `dsh-runtime` is a read-only Runtime Explorer for DeepSeek Harness. It ships as
 two DSH plugins: a Host gateway that projects Cordis runtime state and
 privacy-safe session-event metadata, plus a Web client that renders the graph
-and request trace.
+and request trace. The overview also exposes per-plugin Effect activity as
+Current, Delta, Churn, trend, and bounded recent lifecycle transitions.
 
 ## Packages
 

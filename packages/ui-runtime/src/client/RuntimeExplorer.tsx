@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import { ArrowLeftIcon, ChevronRightIcon, Squares2X2Icon } from '@heroicons/react/24/outline'
 import type {
-  RuntimeFiberPhase, RuntimeGraphEdge, RuntimeGraphNode, RuntimeTraceEvent, RuntimeTraceLane,
+  RuntimeFiberPhase, RuntimeGraphEdge, RuntimeGraphNode, RuntimeGraphServiceNode, RuntimeGraphServiceRelation,
+  RuntimeTraceEvent, RuntimeTraceLane,
 } from '@deepseek-ai/dsh-api-remotes/client'
 import {
   IconBranchOutline16, IconCloseOutline16, IconCordisPluginOutline14, IconDataOutline16, IconRefreshOutline16,
@@ -13,15 +14,11 @@ import {
 import type { InjectFace, PropsLocale, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type { RuntimeExplorerFace } from './faces.ts'
-import {
-  focusRuntimeGraph, runtimeGraphRelations, runtimeLifecycleStatus, summarizeRuntimeGraph,
-} from './graph.ts'
+import { focusRuntimeGraph, runtimeGraphRelations, runtimeLifecycleStatus } from './graph.ts'
 import { RuntimeGraphCanvas } from './RuntimeGraphCanvas.tsx'
 import { RuntimeOverview } from './RuntimeOverview.tsx'
-import { runtimeG6NodeCategory } from './g6-graph.ts'
-import type {
-  RuntimeGraphNeighbourDepth, RuntimeGraphSavedPositions, RuntimeGraphSummary,
-} from './graph.ts'
+import { runtimeG6NodeCategory, type RuntimeG6Focus } from './g6-graph.ts'
+import type { RuntimeGraphNeighbourDepth, RuntimeGraphRelations, RuntimeGraphSavedPositions } from './graph.ts'
 import { pruneGraphLayout, readGraphPresentation, writeGraphLayout } from './graph-persistence.ts'
 import type { RuntimeLocaleKey } from './locales.ts'
 import type { createRuntimeStore, RuntimeCategoryFilter, RuntimePhaseFilter } from './store.ts'
@@ -49,6 +46,7 @@ const CATEGORY_LABELS = {
   session: 'categorySession',
   interface: 'categoryInterface',
   extension: 'categoryExtension',
+  service: 'serviceNode',
 } as const satisfies Record<Exclude<RuntimeCategoryFilter, 'all'>, RuntimeLocaleKey>
 
 const LANE_LABELS = {
@@ -75,6 +73,13 @@ function includesNode(node: RuntimeGraphNode, query: string): boolean {
   if (query === '') return true
   const text = [node.label, node.moduleName, node.entryId, ...node.provides, ...node.injects].join('\n').toLowerCase()
   return text.includes(query)
+}
+
+function includesService(service: RuntimeGraphServiceNode, query: string): boolean {
+  if (query === '') return true
+  return [service.name, service.id, service.providerEntryId, service.providerFiberId]
+    .filter(value => value !== undefined)
+    .join('\n').toLowerCase().includes(query)
 }
 
 function includesEvent(event: RuntimeTraceEvent, query: string): boolean {
@@ -106,17 +111,21 @@ function MetadataList({ values, empty }: { values: readonly string[]; empty: str
 }
 
 function GraphView({
-  nodes, allNodes, edges, summary, totalNodes, selectedId, selectedLabel, onSelect, onClearSelection,
+  nodes, allNodes, edges, allEdges, services, serviceRelations, totalNodes, totalServices,
+  graphFocus, focusLabel, onSelect, onClearSelection,
   categoryFilter, onCategoryFilterChange, empty, graphLabel, phaseLabel, profile, t,
 }: {
   nodes: readonly RuntimeGraphNode[]
   allNodes: readonly RuntimeGraphNode[]
   edges: readonly RuntimeGraphEdge[]
-  summary: RuntimeGraphSummary
+  allEdges: readonly RuntimeGraphEdge[]
+  services: readonly RuntimeGraphServiceNode[]
+  serviceRelations: readonly RuntimeGraphServiceRelation[]
   totalNodes: number
-  selectedId: string | undefined
-  selectedLabel: string | undefined
-  onSelect: (id: string) => void
+  totalServices: number
+  graphFocus: RuntimeG6Focus | undefined
+  focusLabel: string | undefined
+  onSelect: (focus: RuntimeG6Focus) => void
   onClearSelection: () => void
   categoryFilter: RuntimeCategoryFilter
   onCategoryFilterChange: (category: RuntimeCategoryFilter) => void
@@ -133,14 +142,61 @@ function GraphView({
   )
   const [canvasRevision, setCanvasRevision] = useState(0)
   const layoutScopeKey = allNodes.map(node => node.logicalKey).sort().join('|')
-  const focus = useMemo(
-    () => focusRuntimeGraph(nodes, edges, selectedId, neighbourDepth),
-    [edges, neighbourDepth, nodes, selectedId],
+  const selectedPluginId = graphFocus?.kind === 'plugin' ? graphFocus.id : undefined
+  const selectedServiceId = graphFocus?.kind === 'service' ? graphFocus.id : undefined
+  const selectedService = selectedServiceId === undefined
+    ? undefined
+    : services.find(service => service.id === selectedServiceId)
+  const selectedServiceRelations = useMemo(
+    () => selectedServiceId === undefined
+      ? []
+      : serviceRelations.filter(relation => relation.serviceNodeId === selectedServiceId),
+    [selectedServiceId, serviceRelations],
   )
+  const focus = useMemo(() => {
+    if (selectedService === undefined) {
+      const sourceNodes = selectedPluginId === undefined ? nodes : allNodes
+      const sourceEdges = selectedPluginId === undefined ? edges : allEdges
+      return focusRuntimeGraph(sourceNodes, sourceEdges, selectedPluginId, neighbourDepth)
+    }
+    const relatedIds = new Set([
+      ...(selectedService.providerNodeId === undefined ? [] : [selectedService.providerNodeId]),
+      ...selectedServiceRelations.map(relation => relation.consumerNodeId),
+    ])
+    const relatedNodes = allNodes.filter(node => relatedIds.has(node.id))
+    return { nodes: relatedNodes, edges: graphEdgesFor(relatedNodes, allEdges) }
+  }, [allEdges, allNodes, edges, neighbourDepth, nodes, selectedPluginId, selectedService, selectedServiceRelations])
   const relations = useMemo(
-    () => runtimeGraphRelations(focus.nodes, focus.edges, selectedId),
-    [focus.edges, focus.nodes, selectedId],
+    (): RuntimeGraphRelations => {
+      if (selectedService === undefined) {
+        return runtimeGraphRelations(focus.nodes, focus.edges, selectedPluginId)
+      }
+      const nodeRelations = new Map<string, 'dependency' | 'dependant' | 'both'>()
+      if (selectedService.providerNodeId !== undefined) {
+        nodeRelations.set(selectedService.providerNodeId, 'dependency')
+      }
+      for (const relation of selectedServiceRelations) {
+        const current = nodeRelations.get(relation.consumerNodeId)
+        nodeRelations.set(relation.consumerNodeId, current === 'dependency' ? 'both' : 'dependant')
+      }
+      return { nodes: nodeRelations, edges: new Map() }
+    },
+    [focus.edges, focus.nodes, selectedPluginId, selectedService, selectedServiceRelations],
   )
+  const visibleNodeIds = useMemo(() => new Set(focus.nodes.map(node => node.id)), [focus.nodes])
+  const visibleServiceCount = useMemo(() => {
+    if (selectedService !== undefined) return 1
+    if (selectedPluginId === undefined) return 0
+    return new Set(
+      serviceRelations
+        .filter((relation) => {
+          const related = relation.consumerNodeId === selectedPluginId || relation.providerNodeId === selectedPluginId
+          const providerVisible = relation.providerNodeId === undefined || visibleNodeIds.has(relation.providerNodeId)
+          return related && visibleNodeIds.has(relation.consumerNodeId) && providerVisible
+        })
+        .map(relation => relation.serviceNodeId),
+    ).size
+  }, [selectedPluginId, selectedService, serviceRelations, visibleNodeIds])
 
   useEffect(() => {
     const presentation = readGraphPresentation(profile)
@@ -165,28 +221,20 @@ function GraphView({
     writeGraphLayout(profile, {}, 1)
     setCanvasRevision(current => current + 1)
   }
-  const summaryItems: Array<[RuntimeLocaleKey, number, string]> = [
-    ['pending', summary.pending, 'pending'],
-    ['active', summary.active, 'active'],
-    ['disposed', summary.disposed, 'disposed'],
-    ['failed', summary.failed, 'failed'],
-  ]
-
+  const filteredItemCount = categoryFilter === 'service' ? services.length : nodes.length
+  const totalItemCount = categoryFilter === 'service' ? totalServices : totalNodes
+  const hasVisibleItems = categoryFilter === 'service' ? services.length > 0 : focus.nodes.length > 0
   return (
     <div className={css.graphView}>
-      <dl className={css.graphSummary} aria-label={t('pluginSummary')}>
-        {summaryItems.map(([label, value, state]) => (
-          <div key={label} data-state={state}>
-            <dt>{t(label)}</dt>
-            <dd>{value}</dd>
-          </div>
-        ))}
-      </dl>
-      {selectedId !== undefined && selectedLabel !== undefined && (
+      {graphFocus !== undefined && focusLabel !== undefined && (
         <div className={css.focusBar} role="status" aria-live="polite">
-          <span className={css.focusIdentity}><span>{t('focusedNode')}</span><strong>{selectedLabel}</strong></span>
+          <span className={css.focusIdentity}>
+            <span>{t(graphFocus.kind === 'service' ? 'focusedService' : 'focusedNode')}</span>
+            <strong>{focusLabel}</strong>
+          </span>
           <span className={css.focusCount}>{t('relatedPlugins')} <strong>{focus.nodes.length}</strong> / {totalNodes}</span>
-          <label className={css.depthFilter}>
+          <span className={css.focusCount}>{t('relatedServices')} <strong>{visibleServiceCount}</strong> / {totalServices}</span>
+          {graphFocus.kind === 'plugin' && <label className={css.depthFilter}>
             <span>{t('relationDepth')}</span>
             <select
               aria-label={t('relationDepth')}
@@ -200,22 +248,18 @@ function GraphView({
               <option value="2">{t('twoHops')}</option>
               <option value="all">{t('connectedGraph')}</option>
             </select>
-          </label>
-          <span className={css.relationLegend} aria-label={t('dependencyDirection')}>
-            <span data-relation="dependency"><i aria-hidden />{t('dependencies')}</span>
-            <span data-relation="dependant"><i aria-hidden />{t('dependants')}</span>
-          </span>
+          </label>}
           <button type="button" className={css.showAll} onClick={onClearSelection}>{t('showAll')}</button>
         </div>
       )}
-      {selectedId === undefined && categoryFilter !== 'all' && (
+      {graphFocus === undefined && categoryFilter !== 'all' && (
         <div className={css.focusBar} role="status" aria-live="polite">
           <span className={css.focusIdentity}>
             <span>{t('filteredType')}</span>
             <strong>{t(CATEGORY_LABELS[categoryFilter])}</strong>
           </span>
           <span className={css.focusCount}>
-            {t('visiblePlugins')} <strong>{nodes.length}</strong> / {totalNodes}
+            {t('visiblePlugins')} <strong>{filteredItemCount}</strong> / {totalItemCount}
           </span>
           <button
             type="button"
@@ -226,13 +270,15 @@ function GraphView({
           </button>
         </div>
       )}
-      {nodes.length === 0 ? <div className={css.emptyState}>{empty}</div> : (
+      {!hasVisibleItems ? <div className={css.emptyState}>{empty}</div> : (
         <RuntimeGraphCanvas
-          key={`${profile ?? 'unknown'}:${canvasRevision}:${categoryFilter}`}
+          key={`${profile ?? 'unknown'}:${canvasRevision}:${categoryFilter}:${graphFocus?.kind ?? 'all'}:${graphFocus?.id ?? 'all'}`}
           nodes={focus.nodes}
           edges={focus.edges}
+          services={services}
+          serviceRelations={serviceRelations}
           relations={relations}
-          selectedId={selectedId}
+          focus={graphFocus}
           savedPositions={savedPositions}
           graphLabel={graphLabel}
           phaseLabel={phaseLabel}
@@ -377,25 +423,34 @@ function TraceDirectory({
 }
 
 function PluginInspector({ node, t }: { node: RuntimeGraphNode; t: RuntimeExplorerProps['t'] }) {
+  const lifecycle = statusKey(node.phase)
+  const lifecycleLabel = t(STATUS_LABELS[lifecycle])
   const rows: Array<[RuntimeLocaleKey, string | undefined]> = [
     ['module', node.moduleName],
     ['entry', node.entryId],
     ['fiber', node.fiberId],
     ['runtimeIdentity', node.runtimeId],
-    ['status', t(STATUS_LABELS[statusKey(node.phase)])],
   ]
   return (
     <>
-      <div className={css.inspectorTitle}>
+      <div className={css.inspectorTitle} data-kind="plugin">
         <span className={css.inspectorIcon}><IconCordisPluginOutline14 size={18} /></span>
-        <div><strong>{node.label}</strong><small>{t('selectedPlugin')}</small></div>
+        <div>
+          <strong>{node.label}</strong>
+          <span className={css.inspectorSubtitle}>
+            <small>{t('selectedPlugin')}</small>
+            <span className={css.inspectorStatus} data-state={lifecycle} aria-label={`${t('status')}: ${lifecycleLabel}`}>
+              <i aria-hidden="true" />{lifecycleLabel}
+            </span>
+          </span>
+        </div>
       </div>
       <dl className={css.metadata}>
         {rows.map(([label, value]) => (
           <div key={label}><dt>{t(label)}</dt><dd>{value ?? <span className={css.emptyValue}>{t('unavailable')}</span>}</dd></div>
         ))}
       </dl>
-      {statusKey(node.phase) === 'pending' && (
+      {lifecycle === 'pending' && (
         <section className={css.pendingDiagnosis} data-missing={node.missing.length > 0 || undefined}>
           <h3>{t('pendingDiagnosis')}</h3>
           <p>{t(node.missing.length > 0 ? 'waitingForServices' : 'waitingForRuntime')}</p>
@@ -408,6 +463,64 @@ function PluginInspector({ node, t }: { node: RuntimeGraphNode; t: RuntimeExplor
       <section className={css.inspectorSection}>
         <h3>{t('effects')} <span>{node.effectCount}</span></h3>
         <MetadataList values={node.effects} empty={t('noItems')} />
+      </section>
+    </>
+  )
+}
+
+function ServiceInspector({
+  service, serviceRelations, nodes, t,
+}: {
+  service: RuntimeGraphServiceNode
+  serviceRelations: readonly RuntimeGraphServiceRelation[]
+  nodes: readonly RuntimeGraphNode[]
+  t: RuntimeExplorerProps['t']
+}) {
+  const nodeById = new Map(nodes.map(node => [node.id, node]))
+  const provider = service.providerNodeId === undefined ? undefined : nodeById.get(service.providerNodeId)
+  const consumerIds = [...new Set(
+    serviceRelations
+      .filter(relation => relation.serviceNodeId === service.id)
+      .map(relation => relation.consumerNodeId),
+  )]
+  const consumers = consumerIds
+    .map(id => nodeById.get(id))
+    .filter((node): node is RuntimeGraphNode => node !== undefined)
+  const pluginLabel = (node: RuntimeGraphNode): string => `${node.label} · ${node.moduleName}`
+  const lifecycle = statusKey(service.phase)
+  const lifecycleLabel = t(STATUS_LABELS[lifecycle])
+  const rows: Array<[RuntimeLocaleKey, string | undefined]> = [
+    ['serviceName', service.name],
+    ['serviceIdentity', service.id],
+    ['entry', service.providerEntryId ?? t('rootContext')],
+    ['fiber', service.providerFiberId],
+  ]
+  return (
+    <>
+      <div className={css.inspectorTitle} data-kind="service">
+        <span className={css.inspectorIcon}><IconDataOutline16 size={18} /></span>
+        <div>
+          <strong>{service.name}</strong>
+          <span className={css.inspectorSubtitle}>
+            <small>{t('selectedService')}</small>
+            <span className={css.inspectorStatus} data-state={lifecycle} aria-label={`${t('status')}: ${lifecycleLabel}`}>
+              <i aria-hidden="true" />{lifecycleLabel}
+            </span>
+          </span>
+        </div>
+      </div>
+      <dl className={css.metadata}>
+        {rows.map(([label, value]) => (
+          <div key={label}><dt>{t(label)}</dt><dd>{value ?? <span className={css.emptyValue}>{t('unavailable')}</span>}</dd></div>
+        ))}
+      </dl>
+      <section className={css.inspectorSection}>
+        <h3>{t('providerPlugins')} <span>{provider === undefined ? 0 : 1}</span></h3>
+        <MetadataList values={provider === undefined ? [] : [pluginLabel(provider)]} empty={t('noProvider')} />
+      </section>
+      <section className={css.inspectorSection}>
+        <h3>{t('consumerPlugins')} <span>{consumers.length}</span></h3>
+        <MetadataList values={consumers.map(pluginLabel)} empty={t('noItems')} />
       </section>
     </>
   )
@@ -471,6 +584,8 @@ export function RuntimeExplorer({
     }
     if (state.selection?.kind === 'node' && !data.graph.nodes.some(node => node.id === state.selection?.id)) {
       actions.select(undefined)
+    } else if (state.selection?.kind === 'service' && !data.graph.services.some(service => service.id === state.selection?.id)) {
+      actions.select(undefined)
     } else if (state.selection?.kind === 'event' && !data.trace.some(event => event.id === state.selection?.id)) {
       actions.select(undefined)
     }
@@ -482,17 +597,28 @@ export function RuntimeExplorer({
   }, [actions, data, state.open, state.selection, state.traceTurnKey, traceSessions])
   if (!state.open) return null
 
-  const graphNodes = data?.graph.nodes.filter(node => (
+  const graphNodes = state.category === 'service' ? [] : data?.graph.nodes.filter(node => (
     includesNode(node, query)
     && (state.phase === 'all' || statusKey(node.phase) === state.phase)
     && (state.category === 'all' || runtimeG6NodeCategory(node.moduleName, node.label) === state.category)
   )) ?? []
+  const graphServices = data === undefined
+    ? []
+    : state.category === 'service'
+      ? data.graph.services.filter(service => (
+          includesService(service, query)
+          && (state.phase === 'all' || statusKey(service.phase) === state.phase)
+        ))
+      : data.graph.services
   const graphEdges = data === undefined ? [] : graphEdgesFor(graphNodes, data.graph.edges)
   const selectedTurn = traceSessions.flatMap(session => session.turns)
     .find(turn => turn.key === state.traceTurnKey)
   const traceEvents = selectedTurn?.events.filter(event => includesEvent(event, query)) ?? []
   const selectedNode = state.selection?.kind === 'node'
     ? data?.graph.nodes.find(node => node.id === state.selection?.id)
+    : undefined
+  const selectedService = state.selection?.kind === 'service'
+    ? data?.graph.services.find(service => service.id === state.selection?.id)
     : undefined
   const selectedEvent = state.selection?.kind === 'event'
     ? data?.trace.find(event => event.id === state.selection?.id)
@@ -563,7 +689,9 @@ export function RuntimeExplorer({
           </select>
         )}
       </div>
-      <div className={clsx(css.body, (selectedNode !== undefined || selectedEvent !== undefined) && css.withInspector)}>
+      <div className={clsx(css.body, (
+        selectedNode !== undefined || selectedService !== undefined || selectedEvent !== undefined
+      ) && css.withInspector)}>
         <main className={css.canvas}>
           {remote.loading && data === undefined && <div className={css.emptyState}>{t('loadingSnapshot')}</div>}
           {remote.error !== undefined && data === undefined && (
@@ -572,6 +700,7 @@ export function RuntimeExplorer({
           {data !== undefined && state.tab === 'overview' && (
             <RuntimeOverview
               overview={data.overview}
+              activity={data.effectActivity}
               t={t}
               onInspect={(category, status) => {
                 actions.setTab('graph')
@@ -585,17 +714,24 @@ export function RuntimeExplorer({
               nodes={graphNodes}
               allNodes={data.graph.nodes}
               edges={graphEdges}
-              summary={summarizeRuntimeGraph(data.graph.nodes)}
+              allEdges={data.graph.edges}
+              services={graphServices}
+              serviceRelations={data.graph.serviceRelations}
               totalNodes={data.graph.nodes.length}
-              selectedId={selectedNode?.id}
-              selectedLabel={selectedNode?.label}
+              totalServices={data.overview.serviceBreakdown.total}
+              graphFocus={selectedNode === undefined
+                ? selectedService === undefined ? undefined : { kind: 'service', id: selectedService.id }
+                : { kind: 'plugin', id: selectedNode.id }}
+              focusLabel={selectedNode?.label ?? selectedService?.name}
               profile={data.profile}
               empty={t('emptyGraph')}
               graphLabel={t('graphLabel')}
               phaseLabel={phase => t(STATUS_LABELS[statusKey(phase)])}
               categoryFilter={state.category}
               t={t}
-              onSelect={(id) => { actions.select({ kind: 'node', id }) }}
+              onSelect={(focus) => {
+                actions.select({ kind: focus.kind === 'plugin' ? 'node' : 'service', id: focus.id })
+              }}
               onClearSelection={() => { actions.select(undefined) }}
               onCategoryFilterChange={(category) => { actions.setCategory(category) }}
             />
@@ -621,12 +757,18 @@ export function RuntimeExplorer({
               />
           )}
         </main>
-        {(selectedNode !== undefined || selectedEvent !== undefined) && (
+        {(selectedNode !== undefined || selectedService !== undefined || selectedEvent !== undefined) && (
           <aside className={css.inspector}>
             <button type="button" className={css.inspectorClose} aria-label={t('closeInspector')} onClick={() => { actions.select(undefined) }}>
               <IconCloseOutline16 size={16} />
             </button>
             {selectedNode !== undefined && <PluginInspector node={selectedNode} t={t} />}
+            {selectedService !== undefined && <ServiceInspector
+              service={selectedService}
+              serviceRelations={data?.graph.serviceRelations ?? []}
+              nodes={data?.graph.nodes ?? []}
+              t={t}
+            />}
             {selectedEvent !== undefined && <EventInspector event={selectedEvent} t={t} />}
           </aside>
         )}

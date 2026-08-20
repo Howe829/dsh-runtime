@@ -12,9 +12,13 @@ import type {} from 'zod'
 import type {
   RuntimeExplorerCapabilities,
   RuntimeExplorerSnapshot,
+  RuntimeEffectActivitySnapshot,
+  RuntimeEffectTransition,
   RuntimeFiberPhase,
   RuntimeGraphEdge,
   RuntimeGraphNode,
+  RuntimeGraphServiceNode,
+  RuntimeGraphServiceRelation,
   RuntimeGraphSnapshot,
   RuntimeCollectionOverview,
   RuntimeOverviewSnapshot,
@@ -32,6 +36,9 @@ export type * from './types.ts'
 const DEFAULT_TRACE_LIMIT = 256
 const DEFAULT_EFFECT_LIMIT = 12
 const DEFAULT_REFRESH_INTERVAL_MS = 1500
+const DEFAULT_ACTIVITY_WINDOW_MS = 5 * 60 * 1000
+const DEFAULT_ACTIVITY_BUCKET_MS = 10 * 1000
+const DEFAULT_ACTIVITY_TRANSITION_LIMIT = 4096
 const RUNTIME_PROCESS_STATE = Symbol.for('@deepseek-ai/dsh-runtime/process-state')
 
 interface RuntimeProcessState {
@@ -42,13 +49,15 @@ interface RuntimeProcessState {
   turnCount: number
   errorCount: number
   readonly runtimeIds: WeakMap<Plugin.Runtime, string>
+  nextServiceId: number
+  readonly serviceIds: Map<symbol, string>
 }
 
 const CAPABILITIES: RuntimeExplorerCapabilities = {
   fiberInstances: false,
   ownershipEdges: false,
   scopes: false,
-  lifecycleTransitions: false,
+  lifecycleTransitions: true,
   turnPluginAttribution: false,
   eventDispatch: 'none',
   payloadCapture: false,
@@ -66,8 +75,18 @@ function runtimeProcessState(ctx: Context): RuntimeProcessState {
     turnCount: 0,
     errorCount: 0,
     runtimeIds: new WeakMap(),
+    nextServiceId: 0,
+    serviceIds: new Map(),
   }
   Object.defineProperty(root, RUNTIME_PROCESS_STATE, { value: created })
+  return created
+}
+
+function serviceRuntimeId(state: RuntimeProcessState, key: symbol): string {
+  const current = state.serviceIds.get(key)
+  if (current !== undefined) return current
+  const created = `${state.bootId}:service:${++state.nextServiceId}`
+  state.serviceIds.set(key, created)
   return created
 }
 
@@ -88,6 +107,12 @@ export interface Config {
   effectLimit?: number
   /** Browser snapshot refresh cadence while the explorer is open. @default 1500 */
   refreshIntervalMs?: number
+  /** Rolling Effect activity window in milliseconds. @default 300000 */
+  activityWindowMs?: number
+  /** Effect trend bucket width in milliseconds. @default 10000 */
+  activityBucketMs?: number
+  /** Maximum Effect lifecycle transitions retained in memory. @default 4096 */
+  activityTransitionLimit?: number
 }
 
 type ResolvedConfig = Required<Config>
@@ -220,15 +245,33 @@ function owningEntryId(fiber: Fiber): string | undefined {
   }
 }
 
-function liveImplementations(ctx: Context): Array<{ name: string; fiber: Fiber }> {
+function liveImplementations(ctx: Context): Array<{ key: symbol; name: string; fiber: Fiber }> {
   const store = ctx.reflect.store
   return Object.getOwnPropertySymbols(store)
-    .map(key => store[key])
-    .filter((impl): impl is NonNullable<typeof impl> => impl !== undefined)
+    .flatMap((key) => {
+      const impl = store[key]
+      return impl === undefined ? [] : [{ key, name: impl.name, fiber: impl.fiber }]
+    })
 }
 
 function effectLabels(effects: readonly EffectMeta[]): string[] {
   return effects.flatMap(effect => [effect.label, ...effectLabels(effect.children)])
+}
+
+function effectCount(effects: readonly EffectMeta[]): number {
+  return effects.reduce((count, effect) => count + 1 + effectCount(effect.children), 0)
+}
+
+function liveEffectCountsByEntry(ctx: Context): Map<string, number> {
+  const counts = new Map<string, number>()
+  for (const runtime of ctx.registry.values()) {
+    for (const fiber of runtime.fibers) {
+      const entryId = owningEntryId(fiber)
+      if (entryId === undefined) continue
+      counts.set(entryId, (counts.get(entryId) ?? 0) + effectCount(fiber.getEffects()))
+    }
+  }
+  return counts
 }
 
 /** Project process-lifetime Cordis and Agent counters without exposing payload data. */
@@ -239,6 +282,7 @@ function projectRuntimeOverview(
 ): RuntimeOverviewSnapshot {
   const fibers = [...ctx.registry.values()].flatMap(runtime => [...runtime.fibers])
   const implementations = liveImplementations(ctx)
+  const effectsByEntry = liveEffectCountsByEntry(ctx)
   const loaderBreakdown = summarizeRuntimeCollection(graph.nodes.map(node => ({
     category: runtimePluginCategory(node.moduleName, node.label),
     status: phaseStatus(node.phase),
@@ -258,7 +302,10 @@ function projectRuntimeOverview(
     fibers: fibers.length,
     turns: state.turnCount,
     active: fibers.filter(fiber => fiber.state === FIBER_STATE.ACTIVE).length,
-    effects: graph.nodes.reduce((count, node) => count + node.effectCount, 0),
+    effects: graph.nodes.reduce(
+      (count, node) => count + (effectsByEntry.get(node.entryId) ?? 0),
+      0,
+    ),
     events: state.eventCount,
     errors: state.errorCount,
     loaderBreakdown,
@@ -281,7 +328,9 @@ function isErrorEvent(event: SessionEvent): boolean {
 export function projectRuntimeGraph(ctx: Context, effectLimit: number): RuntimeGraphSnapshot {
   const processState = runtimeProcessState(ctx)
   const implementations = liveImplementations(ctx)
-  const providerByService = new Map(implementations.map(impl => [impl.name, owningEntryId(impl.fiber)]))
+  const implementationByIdentity = new Map(implementations.map(implementation => [
+    ctx.reflect.store[implementation.key], implementation,
+  ]))
   const providedByEntry = new Map<string, string[]>()
   for (const impl of implementations) {
     const entryId = owningEntryId(impl.fiber)
@@ -292,6 +341,29 @@ export function projectRuntimeGraph(ctx: Context, effectLimit: number): RuntimeG
   }
 
   const nodes: RuntimeGraphNode[] = []
+  const services: RuntimeGraphServiceNode[] = []
+  const serviceRelations: RuntimeGraphServiceRelation[] = []
+  for (const implementation of implementations) {
+    const providerEntryId = owningEntryId(implementation.fiber)
+    services.push({
+      id: serviceRuntimeId(processState, implementation.key),
+      name: implementation.name,
+      ...(providerEntryId === undefined ? {} : {
+        providerNodeId: entryNodeId(providerEntryId),
+        providerEntryId,
+      }),
+      ...(implementation.fiber.uid === null ? {} : {
+        providerFiberId: `${processState.bootId}:${implementation.fiber.uid}`,
+      }),
+      phase: FIBER_PHASE[implementation.fiber.state],
+    })
+  }
+  const serviceById = new Map(services.map(service => [service.id, service]))
+  const serviceIdByImplementation = new Map(
+    [...implementationByIdentity].flatMap(([identity, implementation]) => identity === undefined
+      ? []
+      : [[identity, serviceRuntimeId(processState, implementation.key)] as const]),
+  )
   const edgeServices = new Map<string, { source: string; target: string; services: string[] }>()
   for (const entry of ctx.loader.entries()) {
     if (entry.options.group) continue
@@ -300,13 +372,28 @@ export function projectRuntimeGraph(ctx: Context, effectLimit: number): RuntimeG
     const source = entryNodeId(entry.id)
     const missing: string[] = []
     for (const service of injects) {
-      const providerEntry = providerByService.get(service)
-      if (providerEntry === undefined) {
+      const implementation = fiber?.ctx.reflect._getImpl(service, false)
+      if (implementation === undefined) {
         missing.push(service)
         continue
       }
-      const target = entryNodeId(providerEntry)
-      if (target === source) continue
+      const serviceNodeId = serviceIdByImplementation.get(implementation)
+      const serviceNode = serviceNodeId === undefined ? undefined : serviceById.get(serviceNodeId)
+      if (serviceNode === undefined) {
+        // A reflected implementation without a projected node would make the
+        // snapshot internally inconsistent. It is not evidence that the
+        // consumer is missing the service, so keep it out of `missing`.
+        continue
+      }
+      const target = serviceNode.providerNodeId
+      serviceRelations.push({
+        id: `service:${source}->${serviceNode.id}`,
+        serviceNodeId: serviceNode.id,
+        service,
+        consumerNodeId: source,
+        ...(target === undefined ? {} : { providerNodeId: target }),
+      })
+      if (target === undefined || target === source) continue
       const key = `${source}\u0000${target}`
       const edge = edgeServices.get(key) ?? { source, target, services: [] }
       edge.services.push(service)
@@ -338,7 +425,125 @@ export function projectRuntimeGraph(ctx: Context, effectLimit: number): RuntimeG
     target: edge.target,
     services: edge.services.sort(),
   }))
-  return { nodes, edges }
+  return {
+    nodes,
+    edges,
+    services: services.sort((left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id)),
+    serviceRelations: serviceRelations.sort((left, right) => left.id.localeCompare(right.id)),
+  }
+}
+
+interface RuntimeEffectOwner {
+  readonly pluginId: string
+  readonly entryId: string
+  readonly moduleName: string
+  readonly pluginLabel: string
+  readonly fiberId?: string
+  readonly effectId: string
+  readonly effectLabel: string
+  readonly createdAt: number
+}
+
+function projectEffectActivity(
+  graph: RuntimeGraphSnapshot,
+  currentByEntry: ReadonlyMap<string, number>,
+  transitions: readonly RuntimeEffectTransition[],
+  now: number,
+  availableSince: number,
+  windowMs: number,
+  bucketMs: number,
+  droppedTransitions: number,
+  lastDroppedAt: number | undefined,
+): RuntimeEffectActivitySnapshot {
+  const windowStart = Math.max(availableSince, now - windowMs)
+  const visible = transitions.filter(transition => transition.time >= windowStart)
+  const rows = new Map<string, {
+    pluginId: string
+    entryId: string
+    moduleName: string
+    label: string
+    current: number
+    transitions: RuntimeEffectTransition[]
+  }>()
+  for (const node of graph.nodes) {
+    rows.set(node.id, {
+      pluginId: node.id,
+      entryId: node.entryId,
+      moduleName: node.moduleName,
+      label: node.label,
+      current: currentByEntry.get(node.entryId) ?? 0,
+      transitions: [],
+    })
+  }
+  for (const transition of visible) {
+    const row = rows.get(transition.pluginId) ?? {
+      pluginId: transition.pluginId,
+      entryId: transition.entryId,
+      moduleName: transition.moduleName,
+      label: transition.pluginLabel,
+      current: 0,
+      transitions: [],
+    }
+    row.transitions.push(transition)
+    rows.set(transition.pluginId, row)
+  }
+
+  const plugins = [...rows.values()].flatMap((row) => {
+    const created = row.transitions.filter(transition => transition.action === 'created').length
+    const disposed = row.transitions.length - created
+    if (row.current === 0 && created === 0 && disposed === 0) return []
+    const delta = created - disposed
+    const bucketCount = Math.max(1, Math.ceil((now - windowStart) / bucketMs))
+    const buckets = Array.from({ length: bucketCount }, () => ({ created: 0, disposed: 0 }))
+    for (const transition of row.transitions) {
+      const index = Math.min(bucketCount - 1, Math.floor((transition.time - windowStart) / bucketMs))
+      const bucket = buckets[index]
+      if (bucket !== undefined) bucket[transition.action] += 1
+    }
+    let current = Math.max(0, row.current - delta)
+    const trend = buckets.map((bucket, index) => {
+      current += bucket.created - bucket.disposed
+      return {
+        time: Math.min(now, windowStart + (index + 1) * bucketMs),
+        current,
+        created: bucket.created,
+        disposed: bucket.disposed,
+      }
+    })
+    return [{
+      pluginId: row.pluginId,
+      entryId: row.entryId,
+      moduleName: row.moduleName,
+      label: row.label,
+      current: row.current,
+      created,
+      disposed,
+      delta,
+      churn: created + disposed,
+      trend,
+    }]
+  }).sort((left, right) => (
+    right.delta - left.delta
+    || right.churn - left.churn
+    || right.current - left.current
+    || left.label.localeCompare(right.label)
+  ))
+  const current = plugins.reduce((sum, plugin) => sum + plugin.current, 0)
+  const created = visible.filter(transition => transition.action === 'created').length
+  const disposed = visible.length - created
+  return {
+    windowMs,
+    availableSince,
+    complete: lastDroppedAt === undefined || lastDroppedAt < windowStart,
+    droppedTransitions,
+    current,
+    created,
+    disposed,
+    delta: created - disposed,
+    churn: created + disposed,
+    plugins,
+    recent: [...visible].reverse(),
+  }
 }
 
 function traceLane(type: string): RuntimeTraceLane {
@@ -404,14 +609,30 @@ export class RuntimeExplorerGateway extends TypertRemoteService {
     traceLimit: z.natural().min(1).default(DEFAULT_TRACE_LIMIT),
     effectLimit: z.natural().default(DEFAULT_EFFECT_LIMIT),
     refreshIntervalMs: z.natural().min(250).default(DEFAULT_REFRESH_INTERVAL_MS),
+    activityWindowMs: z.natural().min(1000).default(DEFAULT_ACTIVITY_WINDOW_MS),
+    activityBucketMs: z.natural().min(250).default(DEFAULT_ACTIVITY_BUCKET_MS),
+    activityTransitionLimit: z.natural().min(1).default(DEFAULT_ACTIVITY_TRANSITION_LIMIT),
   })
 
   private readonly resolved: ResolvedConfig
   private readonly trace: RuntimeTraceEvent[] = []
+  private readonly activityStartedAt = Date.now()
+  private readonly effectOwners = new WeakMap<EffectMeta, RuntimeEffectOwner>()
+  private readonly effectTransitions: RuntimeEffectTransition[] = []
+  private nextEffectId = 0
+  private nextTransitionId = 0
+  private droppedTransitions = 0
+  private lastDroppedAt: number | undefined
 
   constructor(ctx: Context, config: Config) {
     super(ctx, 'runtimeExplorer')
     this.resolved = config as ResolvedConfig
+    if (this.resolved.activityBucketMs > this.resolved.activityWindowMs) {
+      throw new RangeError('activityBucketMs must not exceed activityWindowMs')
+    }
+    ctx.on('internal/effect', (fiber, effect, action) => {
+      this.captureEffectTransition(fiber, effect, action)
+    }, { global: true })
     ctx.on('session/event', (session, event) => {
       const processState = runtimeProcessState(ctx)
       processState.eventCount += 1
@@ -423,6 +644,55 @@ export class RuntimeExplorerGateway extends TypertRemoteService {
     })
   }
 
+  private captureEffectTransition(fiber: Fiber, effect: EffectMeta, action: 'created' | 'disposed') {
+    const now = Date.now()
+    let owner = this.effectOwners.get(effect)
+    if (action === 'created') {
+      const entryId = owningEntryId(fiber)
+      if (entryId === undefined) return
+      const entry = [...this.ctx.loader.entries()].find(candidate => candidate.id === entryId)
+      if (entry === undefined) return
+      const processState = runtimeProcessState(this.ctx)
+      const effectId = `${processState.bootId}:effect:${++this.nextEffectId}`
+      owner = {
+        pluginId: entryNodeId(entryId),
+        entryId,
+        moduleName: entry.options.name,
+        pluginLabel: shortLabel(entry.options.name),
+        ...(fiber.uid === null ? {} : { fiberId: `${processState.bootId}:${fiber.uid}` }),
+        effectId,
+        effectLabel: effect.label,
+        createdAt: now,
+      }
+      this.effectOwners.set(effect, owner)
+    }
+    if (owner === undefined) return
+    const processState = runtimeProcessState(this.ctx)
+    this.effectTransitions.push({
+      id: `${processState.bootId}:effect-transition:${++this.nextTransitionId}`,
+      effectId: owner.effectId,
+      action,
+      time: now,
+      pluginId: owner.pluginId,
+      entryId: owner.entryId,
+      moduleName: owner.moduleName,
+      pluginLabel: owner.pluginLabel,
+      ...(owner.fiberId === undefined ? {} : { fiberId: owner.fiberId }),
+      effectLabel: owner.effectLabel,
+      ...(action === 'disposed' ? { durationMs: Math.max(0, now - owner.createdAt) } : {}),
+    })
+    const cutoff = now - this.resolved.activityWindowMs
+    while ((this.effectTransitions[0]?.time ?? Number.POSITIVE_INFINITY) < cutoff) {
+      this.effectTransitions.shift()
+    }
+    const overflow = this.effectTransitions.length - this.resolved.activityTransitionLimit
+    if (overflow > 0) {
+      const dropped = this.effectTransitions.splice(0, overflow)
+      this.droppedTransitions += dropped.length
+      this.lastDroppedAt = dropped.at(-1)?.time
+    }
+  }
+
   /**
    * Read live Loader state and the bounded event-metadata window.
    * @returns A point-in-time graph and trace containing no message, model-output, tool-argument, or tool-result content.
@@ -431,19 +701,31 @@ export class RuntimeExplorerGateway extends TypertRemoteService {
   snapshot(): RuntimeExplorerSnapshot {
     const processState = runtimeProcessState(this.ctx)
     const graph = projectRuntimeGraph(this.ctx, this.resolved.effectLimit)
+    const observedAt = Date.now()
     return {
       schemaVersion: RUNTIME_EXPLORER_SCHEMA_VERSION,
       bootId: processState.bootId,
       snapshotSeq: ++processState.snapshotSeq,
       profile: this.ctx.get('launchProfile')?.get() ?? null,
-      observedAt: Date.now(),
+      observedAt,
       refreshIntervalMs: this.resolved.refreshIntervalMs,
       overview: projectRuntimeOverview(this.ctx, processState, graph),
+      effectActivity: projectEffectActivity(
+        graph,
+        liveEffectCountsByEntry(this.ctx),
+        this.effectTransitions,
+        observedAt,
+        this.activityStartedAt,
+        this.resolved.activityWindowMs,
+        this.resolved.activityBucketMs,
+        this.droppedTransitions,
+        this.lastDroppedAt,
+      ),
       graph,
       trace: [...this.trace],
       capabilities: CAPABILITIES,
       limits: {
-        transitionLimit: 0,
+        transitionLimit: this.resolved.activityTransitionLimit,
         traceEventLimit: this.resolved.traceLimit,
       },
     }

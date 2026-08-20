@@ -14,7 +14,7 @@ import { apply as applyNode } from '../src/index.ts'
 afterEach(cleanup)
 
 const SNAPSHOT = {
-  schemaVersion: 3,
+  schemaVersion: 5,
   bootId: 'fixture-boot',
   snapshotSeq: 1,
   profile: 'fixture-web',
@@ -31,18 +31,22 @@ const SNAPSHOT = {
       statuses: { pending: 0, active: 0, disposed: 0, failed: 0 }, byType: [],
     },
   },
-  graph: { nodes: [], edges: [] },
+  effectActivity: {
+    windowMs: 300_000, availableSince: 1, complete: true, droppedTransitions: 0,
+    current: 0, created: 0, disposed: 0, delta: 0, churn: 0, plugins: [], recent: [],
+  },
+  graph: { nodes: [], edges: [], services: [], serviceRelations: [] },
   trace: [],
   capabilities: {
     fiberInstances: false,
     ownershipEdges: false,
     scopes: false,
-    lifecycleTransitions: false,
+    lifecycleTransitions: true,
     turnPluginAttribution: false,
     eventDispatch: 'none',
     payloadCapture: false,
   },
-  limits: { transitionLimit: 0, traceEventLimit: 256 },
+  limits: { transitionLimit: 4096, traceEventLimit: 256 },
 }
 
 async function bench() {

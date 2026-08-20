@@ -8,10 +8,10 @@ import type { RuntimeG6NodeCategory } from './g6-graph.ts'
 export type RuntimeTab = 'overview' | 'graph' | 'trace'
 /** Client-side filter over the four product-facing lifecycle states. */
 export type RuntimePhaseFilter = RuntimeLifecycleStatus | 'all'
-/** Client-side filter over the inferred DSH plugin roles. */
+/** Client-side filter over inferred plugin roles or concrete Service nodes. */
 export type RuntimeCategoryFilter = Exclude<RuntimeG6NodeCategory, 'missing'> | 'all'
-/** Current graph-node or trace-event inspector selection. */
-export type RuntimeSelection = { kind: 'node' | 'event'; id: string }
+/** Current plugin, exact scoped Service implementation, or trace-event inspector selection. */
+export type RuntimeSelection = { kind: 'node' | 'service' | 'event'; id: string }
 
 /** Root-scoped view state shared by the sidebar action and overlay. */
 export interface RuntimeStoreState {

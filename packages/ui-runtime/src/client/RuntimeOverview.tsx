@@ -1,11 +1,12 @@
 /** Read-only process, Cordis, and Agent health summary. */
 
 import type {
-  RuntimeOverviewSnapshot, RuntimeOverviewStatus, RuntimePluginCategory,
+  RuntimeEffectActivitySnapshot, RuntimeOverviewSnapshot, RuntimeOverviewStatus, RuntimePluginCategory,
 } from '@deepseek-ai/dsh-api-remotes/client'
 import type { RuntimeLocaleKey } from './locales.ts'
 import css from './RuntimeExplorer.module.css'
 import { RuntimeStatusCard } from './RuntimeStatusCard.tsx'
+import { RuntimeActivity } from './RuntimeActivity.tsx'
 
 const METRICS = [
   'effects', 'turns', 'events',
@@ -21,9 +22,10 @@ export function formatRuntimeUptime(uptimeMs: number): string {
 }
 
 export function RuntimeOverview({
-  overview, t, onInspect,
+  overview, activity, t, onInspect,
 }: {
   overview: RuntimeOverviewSnapshot
+  activity: RuntimeEffectActivitySnapshot
   t: (key: RuntimeLocaleKey) => string
   onInspect?: (category: RuntimePluginCategory | undefined, status: RuntimeOverviewStatus) => void
 }) {
@@ -76,6 +78,7 @@ export function RuntimeOverview({
           </div>
         ))}
       </dl>
+      <RuntimeActivity activity={activity} t={t} />
       <div className={css.overviewDistributions}>
         <RuntimeStatusCard
           title={t('loaderTitle')}

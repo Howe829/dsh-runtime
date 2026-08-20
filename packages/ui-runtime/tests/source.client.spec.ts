@@ -3,7 +3,7 @@ import type { RuntimeExplorerSnapshot } from '@deepseek-ai/dsh-api-remotes/clien
 import { createRuntimeSource } from '../src/client/source.ts'
 
 const snapshot = (observedAt: number, refreshIntervalMs = 500): RuntimeExplorerSnapshot => ({
-  schemaVersion: 3,
+  schemaVersion: 5,
   bootId: 'fixture-boot',
   snapshotSeq: observedAt,
   profile: 'fixture-web',
@@ -20,18 +20,22 @@ const snapshot = (observedAt: number, refreshIntervalMs = 500): RuntimeExplorerS
       statuses: { pending: 0, active: 0, disposed: 0, failed: 0 }, byType: [],
     },
   },
-  graph: { nodes: [], edges: [] },
+  effectActivity: {
+    windowMs: 300_000, availableSince: observedAt, complete: true, droppedTransitions: 0,
+    current: 0, created: 0, disposed: 0, delta: 0, churn: 0, plugins: [], recent: [],
+  },
+  graph: { nodes: [], edges: [], services: [], serviceRelations: [] },
   trace: [],
   capabilities: {
     fiberInstances: false,
     ownershipEdges: false,
     scopes: false,
-    lifecycleTransitions: false,
+    lifecycleTransitions: true,
     turnPluginAttribution: false,
     eventDispatch: 'none',
     payloadCapture: false,
   },
-  limits: { transitionLimit: 0, traceEventLimit: 256 },
+  limits: { transitionLimit: 4096, traceEventLimit: 256 },
 })
 
 afterEach(() => {
@@ -118,7 +122,7 @@ describe('runtime Remote source', () => {
 
   it('rejects an unsupported snapshot schema while keeping the last compatible runtime truth', async () => {
     const report = vi.fn()
-    const unsupported = { ...snapshot(2), schemaVersion: 4 } as unknown as RuntimeExplorerSnapshot
+    const unsupported = { ...snapshot(2), schemaVersion: 99 } as unknown as RuntimeExplorerSnapshot
     const read = vi.fn<() => Promise<RuntimeExplorerSnapshot>>()
       .mockResolvedValueOnce(snapshot(1))
       .mockResolvedValueOnce(unsupported)

@@ -1,11 +1,13 @@
 /** Pure G6 projection and update policy for the Runtime Explorer graph canvas. */
 
 import type { EdgeData, GraphData, NodeData } from '@antv/g6'
-import type { RuntimeGraphEdge, RuntimeGraphNode } from '@deepseek-ai/dsh-api-remotes/client'
+import type {
+  RuntimeGraphEdge, RuntimeGraphNode, RuntimeGraphServiceNode, RuntimeGraphServiceRelation,
+} from '@deepseek-ai/dsh-api-remotes/client'
 import type { RuntimeGraphRelations, RuntimeGraphSavedPositions } from './graph.ts'
 import { runtimeLifecycleStatus } from './graph.ts'
 
-export type RuntimeG6NodeKind = 'plugin' | 'missing-service'
+export type RuntimeG6NodeKind = 'plugin' | 'service' | 'missing-service'
 
 /** Visual role inferred from the plugin package name and its runtime label. */
 export type RuntimeG6NodeCategory =
@@ -16,6 +18,7 @@ export type RuntimeG6NodeCategory =
   | 'session'
   | 'interface'
   | 'extension'
+  | 'service'
   | 'missing'
 
 export interface RuntimeG6NodeMetadata {
@@ -33,11 +36,14 @@ export interface RuntimeG6NodeMetadata {
   readonly missing: readonly string[]
   readonly effectCount: number
   readonly service?: string
+  readonly providerNodeId?: string
+  readonly providerEntryId?: string
+  readonly consumerCount?: number
   readonly order?: number
 }
 
 export interface RuntimeG6EdgeMetadata {
-  readonly kind: 'injects' | 'missing'
+  readonly kind: 'injects' | 'provides' | 'missing'
   readonly relation?: string
   readonly services: readonly string[]
 }
@@ -47,16 +53,25 @@ export interface RuntimeG6GraphData extends GraphData {
   readonly edges: EdgeData[]
 }
 
+/** The graph focus can be either a Loader plugin or one exact scoped Service implementation. */
+export type RuntimeG6Focus =
+  | { readonly kind: 'plugin'; readonly id: string }
+  | { readonly kind: 'service'; readonly id: string }
+
 const MIN_PLUGIN_SIZE = 76
 const MAX_PLUGIN_SIZE = 108
 const MISSING_SERVICE_SIZE = 58
+const SERVICE_SIZE = 72
 export const RUNTIME_G6_COLLISION_GAP = 24
 
 /**
  * Infer a stable, explainable visual category from DSH package conventions.
  * The fallback deliberately stays neutral for third-party plugins.
  */
-export function runtimeG6NodeCategory(moduleName: string, label: string): RuntimeG6NodeCategory {
+export function runtimeG6NodeCategory(
+  moduleName: string,
+  label: string,
+): Exclude<RuntimeG6NodeCategory, 'service' | 'missing'> {
   const name = `${moduleName} ${label}`.toLowerCase()
   const short = label.toLowerCase()
   if (name.includes('cordis') || ['runtime', 'loader', 'app-boot', 'boot'].includes(short)) return 'core'
@@ -69,16 +84,26 @@ export function runtimeG6NodeCategory(moduleName: string, label: string): Runtim
 }
 
 /** Keep the exact plugin name while preferring semantic line breaks inside circles. */
-export function runtimeG6DisplayLabel(label: string): string {
-  if (label.length <= 12 || !label.includes('-')) return label
-  const parts = label.split('-').filter(Boolean)
-  if (parts.length < 2) return label
-  const tokens = parts.map((part, index) => index === parts.length - 1 ? part : `${part}-`)
+export function runtimeG6DisplayLabel(label: string, maxLineLength = 13): string {
+  if (label.length <= maxLineLength) return label
+  const semanticTokens = label
+    .replace(/([a-z0-9])([A-Z])/g, '$1\u0000$2')
+    .replace(/([-_.:/])/g, '$1\u0000')
+    .split('\u0000')
+    .filter(Boolean)
+  const tokens = semanticTokens.flatMap((token) => {
+    if (token.length <= maxLineLength) return [token]
+    const chunks: string[] = []
+    for (let offset = 0; offset < token.length; offset += maxLineLength) {
+      chunks.push(token.slice(offset, offset + maxLineLength))
+    }
+    return chunks
+  })
   const lines: string[] = []
   let current = ''
   for (const token of tokens) {
     const candidate = `${current}${token}`
-    if (current !== '' && candidate.length > 13 && lines.length < 2) {
+    if (current !== '' && candidate.length > maxLineLength) {
       lines.push(current)
       current = token
     } else {
@@ -118,10 +143,15 @@ export function runtimeG6EdgeMetadata(edge: EdgeData): RuntimeG6EdgeMetadata {
 export function buildRuntimeG6Data(
   nodes: readonly RuntimeGraphNode[],
   edges: readonly RuntimeGraphEdge[],
+  services: readonly RuntimeGraphServiceNode[],
+  serviceRelations: readonly RuntimeGraphServiceRelation[],
   relations: RuntimeGraphRelations,
-  selectedId: string | undefined,
+  focus: RuntimeG6Focus | undefined,
   savedPositions: RuntimeGraphSavedPositions,
+  showAllServices = false,
 ): RuntimeG6GraphData {
+  const selectedPluginId = focus?.kind === 'plugin' ? focus.id : undefined
+  const selectedServiceId = focus?.kind === 'service' ? focus.id : undefined
   const degree = new Map<string, number>()
   const nodeIds = new Set(nodes.map(node => node.id))
   const validEdges = edges.filter(edge => nodeIds.has(edge.source) && nodeIds.has(edge.target))
@@ -132,7 +162,7 @@ export function buildRuntimeG6Data(
 
   const projectedNodes: NodeData[] = nodes.map((node) => {
     const saved = savedPositions[node.logicalKey]
-    const size = runtimeG6NodeSize(degree.get(node.id) ?? 0, node.id === selectedId, node.label)
+    const size = runtimeG6NodeSize(degree.get(node.id) ?? 0, node.id === selectedPluginId, node.label)
     const relation = relations.nodes.get(node.id)
     const metadata: RuntimeG6NodeMetadata = {
       kind: 'plugin',
@@ -154,13 +184,28 @@ export function buildRuntimeG6Data(
       size,
       data: metadata as unknown as Record<string, unknown>,
       ...(saved === undefined ? {} : { style: { x: saved.x, y: saved.y } }),
-      states: node.id === selectedId ? ['selected'] : [],
+      states: node.id === selectedPluginId ? ['selected'] : [],
     }
   })
 
-  const projectedEdges: EdgeData[] = validEdges.map((edge) => {
+  const focusedServiceRelations = focus === undefined
+    ? []
+    : serviceRelations.filter(relation => (
+      (focus.kind === 'service'
+        ? relation.serviceNodeId === focus.id
+        : relation.consumerNodeId === focus.id || relation.providerNodeId === focus.id)
+      && nodeIds.has(relation.consumerNodeId)
+      && (relation.providerNodeId === undefined || nodeIds.has(relation.providerNodeId))
+    ))
+  const expandedPluginEdges = new Set(focusedServiceRelations.flatMap(
+    relation => relation.providerNodeId === undefined
+      ? []
+      : [`${relation.consumerNodeId}\u0000${relation.providerNodeId}`],
+  ))
+  const projectedEdges: EdgeData[] = validEdges.flatMap((edge) => {
+    if (expandedPluginEdges.has(`${edge.source}\u0000${edge.target}`)) return []
     const relation = relations.edges.get(`${edge.source}:${edge.target}`)
-    return {
+    return [{
       id: edge.id,
       source: edge.source,
       target: edge.target,
@@ -169,11 +214,86 @@ export function buildRuntimeG6Data(
         ...(relation === undefined ? {} : { relation }),
         services: [...edge.services],
       } satisfies RuntimeG6EdgeMetadata as unknown as Record<string, unknown>,
-    }
+    }]
   })
 
-  const selected = selectedId === undefined ? undefined : nodes.find(node => node.id === selectedId)
+  const serviceById = new Map(services.map(service => [service.id, service]))
+  const visibleServiceIds = new Set(showAllServices
+    ? services.map(service => service.id)
+    : focusedServiceRelations.map(relation => relation.serviceNodeId))
+  const consumerCounts = new Map<string, number>()
+  for (const relation of serviceRelations) {
+    consumerCounts.set(relation.serviceNodeId, (consumerCounts.get(relation.serviceNodeId) ?? 0) + 1)
+  }
+  for (const serviceId of visibleServiceIds) {
+    const service = serviceById.get(serviceId)
+    if (service === undefined) continue
+    const id = `service:${service.id}`
+    const serviceSelected = service.id === selectedServiceId
+    const relation = serviceSelected
+      ? 'selected'
+      : focus?.kind === 'plugin'
+        ? service.providerNodeId !== undefined && service.providerNodeId === selectedPluginId
+          ? 'dependant'
+          : 'dependency'
+        : undefined
+    projectedNodes.push({
+      id,
+      size: SERVICE_SIZE + (serviceSelected ? 8 : 0),
+      data: {
+        kind: 'service',
+        label: service.name,
+        phase: runtimeLifecycleStatus(service.phase),
+        category: 'service',
+        ...(relation === undefined ? {} : { relation }),
+        size: SERVICE_SIZE + (serviceSelected ? 8 : 0),
+        pinned: false,
+        provides: [],
+        injects: [],
+        missing: [],
+        effectCount: 0,
+        service: service.name,
+        ...(service.providerNodeId === undefined ? {} : { providerNodeId: service.providerNodeId }),
+        ...(service.providerEntryId === undefined ? {} : { providerEntryId: service.providerEntryId }),
+        consumerCount: consumerCounts.get(service.id) ?? 0,
+      } satisfies RuntimeG6NodeMetadata as unknown as Record<string, unknown>,
+      states: serviceSelected ? ['selected'] : [],
+    })
+    if (service.providerNodeId !== undefined && nodeIds.has(service.providerNodeId)) {
+      projectedEdges.push({
+        id: `provides:${service.providerNodeId}->${service.id}`,
+        source: service.providerNodeId,
+        target: id,
+        data: {
+          kind: 'provides',
+          relation: selectedServiceId !== undefined
+            ? 'dependency'
+            : service.providerNodeId === selectedPluginId ? 'dependant' : 'dependency',
+          services: [service.name],
+        } satisfies RuntimeG6EdgeMetadata as unknown as Record<string, unknown>,
+      })
+    }
+  }
+  for (const relation of focusedServiceRelations) {
+    if (!nodeIds.has(relation.consumerNodeId)) continue
+    projectedEdges.push({
+      id: `injects:${relation.consumerNodeId}->${relation.serviceNodeId}`,
+      source: relation.consumerNodeId,
+      target: `service:${relation.serviceNodeId}`,
+      data: {
+        kind: 'injects',
+        relation: selectedServiceId !== undefined
+          ? 'dependant'
+          : relation.consumerNodeId === selectedPluginId ? 'dependency' : 'dependant',
+        services: [relation.service],
+      } satisfies RuntimeG6EdgeMetadata as unknown as Record<string, unknown>,
+    })
+  }
+
+  const selected = selectedPluginId === undefined ? undefined : nodes.find(node => node.id === selectedPluginId)
   for (const [index, service] of (selected?.missing ?? []).entries()) {
+    const selectedId = selected?.id
+    if (selectedId === undefined) continue
     const id = `missing:${selectedId}:${service}`
     projectedNodes.push({
       id,
@@ -196,7 +316,7 @@ export function buildRuntimeG6Data(
     })
     projectedEdges.push({
       id: `missing-edge:${selectedId}:${service}`,
-      source: selectedId as string,
+      source: selectedId,
       target: id,
       data: {
         kind: 'missing',
@@ -207,6 +327,11 @@ export function buildRuntimeG6Data(
   }
 
   return { nodes: projectedNodes, edges: projectedEdges }
+}
+
+/** Count concrete scoped Service nodes currently materialized in focus mode. */
+export function runtimeG6VisibleServiceCount(data: RuntimeG6GraphData): number {
+  return data.nodes.filter(node => runtimeG6NodeMetadata(node).kind === 'service').length
 }
 
 /** Topology identity used to distinguish live status refreshes from structural changes. */

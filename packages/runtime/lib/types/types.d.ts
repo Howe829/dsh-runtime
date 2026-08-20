@@ -1,6 +1,6 @@
 /** Client-safe snapshot vocabulary for dsh-runtime. @module @deepseek-ai/dsh-runtime/types */
 /** Current normalized snapshot contract emitted by dsh-runtime. */
-export declare const RUNTIME_EXPLORER_SCHEMA_VERSION = 3;
+export declare const RUNTIME_EXPLORER_SCHEMA_VERSION = 5;
 /** Four product-facing lifecycle states shared by overview summaries and filters. */
 export type RuntimeOverviewStatus = 'pending' | 'active' | 'disposed' | 'failed';
 /** Stable plugin domains used across the overview cards and dependency graph. */
@@ -73,10 +73,35 @@ export interface RuntimeGraphEdge {
     /** Injected services resolving through this provider. */
     readonly services: readonly string[];
 }
+/** One concrete Cordis service implementation inside its resolved isolation scope. */
+export interface RuntimeGraphServiceNode {
+    /** Process-lifetime identity of this scoped service implementation. */
+    readonly id: string;
+    /** Cordis service name exposed to consumers. */
+    readonly name: string;
+    /** Loader plugin that owns the providing Fiber, absent for a root Context service. */
+    readonly providerNodeId?: string;
+    readonly providerEntryId?: string;
+    /** Current provider-Fiber identity and lifecycle phase. */
+    readonly providerFiberId?: string;
+    readonly phase: RuntimeFiberPhase;
+}
+/** Exact scoped resolution from one consuming plugin to one service implementation. */
+export interface RuntimeGraphServiceRelation {
+    readonly id: string;
+    readonly serviceNodeId: string;
+    readonly service: string;
+    readonly consumerNodeId: string;
+    /** Loader provider node, absent when Cordis itself owns the service at the root Context. */
+    readonly providerNodeId?: string;
+}
 /** Read-only dependency graph projected from Loader, Fiber, and service state. */
 export interface RuntimeGraphSnapshot {
     readonly nodes: readonly RuntimeGraphNode[];
     readonly edges: readonly RuntimeGraphEdge[];
+    /** Concrete scoped service implementations, materialized by the client only in focus mode. */
+    readonly services: readonly RuntimeGraphServiceNode[];
+    readonly serviceRelations: readonly RuntimeGraphServiceRelation[];
 }
 /** Process-lifetime Cordis and Agent counters for the Runtime Overview tab. */
 export interface RuntimeOverviewSnapshot {
@@ -114,6 +139,60 @@ export interface RuntimeExplorerLimits {
     readonly transitionLimit: number;
     readonly traceEventLimit: number;
 }
+/** Lifecycle operation captured for one Cordis Effect. */
+export type RuntimeEffectAction = 'created' | 'disposed';
+/** One time bucket in a plugin's bounded Effect activity window. */
+export interface RuntimeActivityPoint {
+    readonly time: number;
+    readonly current: number;
+    readonly created: number;
+    readonly disposed: number;
+}
+/** Privacy-safe lifecycle metadata for one Effect transition. */
+export interface RuntimeEffectTransition {
+    readonly id: string;
+    readonly effectId: string;
+    readonly action: RuntimeEffectAction;
+    readonly time: number;
+    readonly pluginId: string;
+    readonly entryId: string;
+    readonly moduleName: string;
+    readonly pluginLabel: string;
+    readonly fiberId?: string;
+    readonly effectLabel: string;
+    readonly durationMs?: number;
+}
+/** Current state and bounded-window activity for one Loader plugin entry. */
+export interface RuntimePluginEffectActivity {
+    readonly pluginId: string;
+    readonly entryId: string;
+    readonly moduleName: string;
+    readonly label: string;
+    readonly current: number;
+    readonly created: number;
+    readonly disposed: number;
+    /** Net lifecycle change inside the window: `created - disposed`. */
+    readonly delta: number;
+    /** Lifecycle turnover inside the window: `created + disposed`. */
+    readonly churn: number;
+    readonly trend: readonly RuntimeActivityPoint[];
+}
+/** Process-local, bounded Effect lifecycle model used by Runtime Overview. */
+export interface RuntimeEffectActivitySnapshot {
+    readonly windowMs: number;
+    /** Earliest time for which this gateway could observe transitions. */
+    readonly availableSince: number;
+    /** False when retained history overflowed inside the visible window. */
+    readonly complete: boolean;
+    readonly droppedTransitions: number;
+    readonly current: number;
+    readonly created: number;
+    readonly disposed: number;
+    readonly delta: number;
+    readonly churn: number;
+    readonly plugins: readonly RuntimePluginEffectActivity[];
+    readonly recent: readonly RuntimeEffectTransition[];
+}
 /** Stable presentation lane for one captured session event. */
 export type RuntimeTraceLane = 'user' | 'agent' | 'llm' | 'tool' | 'session';
 /** Privacy-safe metadata for one committed session event. */
@@ -148,6 +227,7 @@ export interface RuntimeExplorerSnapshot {
     readonly observedAt: number;
     readonly refreshIntervalMs: number;
     readonly overview: RuntimeOverviewSnapshot;
+    readonly effectActivity: RuntimeEffectActivitySnapshot;
     readonly graph: RuntimeGraphSnapshot;
     readonly trace: readonly RuntimeTraceEvent[];
     readonly capabilities: RuntimeExplorerCapabilities;

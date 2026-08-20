@@ -5,11 +5,13 @@ import {
   ArrowsPointingInIcon, MagnifyingGlassMinusIcon, MagnifyingGlassPlusIcon,
 } from '@heroicons/react/24/outline'
 import type { EdgeData, Graph, GraphOptions, IElementEvent, NodeData } from '@antv/g6'
-import type { RuntimeFiberPhase, RuntimeGraphEdge, RuntimeGraphNode } from '@deepseek-ai/dsh-api-remotes/client'
+import type {
+  RuntimeFiberPhase, RuntimeGraphEdge, RuntimeGraphNode, RuntimeGraphServiceNode, RuntimeGraphServiceRelation,
+} from '@deepseek-ai/dsh-api-remotes/client'
 import { Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import {
   buildRuntimeG6Data, runtimeG6CollisionRadius, runtimeG6DisplayLabel, runtimeG6EdgeMetadata, runtimeG6NodeMetadata,
-  type RuntimeG6NodeCategory,
+  type RuntimeG6Focus, type RuntimeG6NodeCategory,
   runtimeG6TopologyKey, syncRuntimeG6Data,
 } from './g6-graph.ts'
 import { loadG6 } from './g6-runtime.ts'
@@ -42,6 +44,7 @@ const NODE_CATEGORY_COLORS: Record<RuntimeG6NodeCategory, { fill: string; stroke
   session: { fill: '#b45309', stroke: '#fcd34d' },
   interface: { fill: '#be185d', stroke: '#f9a8d4' },
   extension: { fill: '#334155', stroke: '#94a3b8' },
+  service: { fill: '#155e75', stroke: '#67e8f9' },
   missing: { fill: '#991b1b', stroke: '#fca5a5' },
 }
 
@@ -53,6 +56,7 @@ const NODE_CATEGORY_KEYS: Array<[Exclude<RuntimeG6NodeCategory, 'missing'>, Runt
   ['session', 'categorySession'],
   ['interface', 'categoryInterface'],
   ['extension', 'categoryExtension'],
+  ['service', 'serviceNode'],
 ]
 
 const NODE_CATEGORY_LOCALE_KEYS: Record<RuntimeG6NodeCategory, RuntimeLocaleKey> = {
@@ -63,11 +67,13 @@ const NODE_CATEGORY_LOCALE_KEYS: Record<RuntimeG6NodeCategory, RuntimeLocaleKey>
   session: 'categorySession',
   interface: 'categoryInterface',
   extension: 'categoryExtension',
+  service: 'serviceNode',
   missing: 'missingService',
 }
 
 const EDGE_LEGEND_ITEMS: Array<[string, RuntimeLocaleKey]> = [
   ['injects', 'edgeInjects'],
+  ['provides', 'edgeProvides'],
   ['dependency', 'dependencies'],
   ['dependant', 'dependants'],
   ['missing', 'edgeMissing'],
@@ -80,12 +86,14 @@ const ZOOM_STEP = 1.2
 export interface RuntimeGraphCanvasProps {
   readonly nodes: readonly RuntimeGraphNode[]
   readonly edges: readonly RuntimeGraphEdge[]
+  readonly services: readonly RuntimeGraphServiceNode[]
+  readonly serviceRelations: readonly RuntimeGraphServiceRelation[]
   readonly relations: RuntimeGraphRelations
-  readonly selectedId: string | undefined
+  readonly focus: RuntimeG6Focus | undefined
   readonly savedPositions: RuntimeGraphSavedPositions
   readonly graphLabel: string
   readonly phaseLabel: (phase: RuntimeFiberPhase) => string
-  readonly onSelect: (id: string) => void
+  readonly onSelect: (focus: RuntimeG6Focus) => void
   readonly onPositionsChange: (positions: RuntimeGraphSavedPositions) => void
   readonly onResetPositions: () => void
   readonly categoryFilter: RuntimeCategoryFilter
@@ -101,23 +109,24 @@ function nodeStyle(datum: NodeData): Record<string, unknown> {
     ? categoryColor.stroke
     : RELATION_COLORS[metadata.relation as keyof typeof RELATION_COLORS] ?? statusColor
   const missing = metadata.kind === 'missing-service'
+  const service = metadata.kind === 'service'
   return {
     size: metadata.size,
     fill: categoryColor.fill,
     stroke: relationColor,
     lineWidth: metadata.relation === 'selected' ? 3 : 1.5,
     lineDash: missing ? [5, 4] : undefined,
-    cursor: missing ? 'default' : 'grab',
+    cursor: missing ? 'default' : service ? 'pointer' : 'grab',
     shadowColor: metadata.relation === 'selected' ? 'rgba(99, 149, 255, 0.34)' : 'rgba(0, 0, 0, 0.28)',
     shadowBlur: metadata.relation === 'selected' ? 18 : 8,
     zIndex: 2,
     icon: false,
     label: true,
-    labelText: runtimeG6DisplayLabel(metadata.label),
+    labelText: runtimeG6DisplayLabel(metadata.label, service ? 10 : 13),
     labelPlacement: 'center',
     labelFill: '#ffffff',
     labelFontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
-    labelFontSize: missing ? 9 : metadata.size >= 96 ? 11 : 10,
+    labelFontSize: missing ? 9 : service ? 9 : metadata.size >= 96 ? 11 : 10,
     labelFontWeight: 600,
     labelLineHeight: missing ? 10 : 12,
     labelMaxLines: 3,
@@ -144,6 +153,7 @@ function edgeStyle(datum: EdgeData): Record<string, unknown> {
     ? '#555a64'
     : RELATION_COLORS[metadata.relation as keyof typeof RELATION_COLORS] ?? '#555a64'
   const missing = metadata.kind === 'missing'
+  const provides = metadata.kind === 'provides'
   const lineDash = missing
     ? [6, 4]
     : metadata.relation === 'dependant'
@@ -152,13 +162,13 @@ function edgeStyle(datum: EdgeData): Record<string, unknown> {
         ? [2, 3]
         : undefined
   return {
-    stroke: missing ? STATUS_COLORS.missing : color,
+    stroke: missing ? STATUS_COLORS.missing : provides ? '#22c55e' : color,
     zIndex: 0,
     lineWidth: metadata.relation === undefined ? 1 : 1.5,
     opacity: metadata.relation === undefined ? 0.38 : 0.74,
     lineDash,
     endArrow: true,
-    endArrowFill: missing ? STATUS_COLORS.missing : color,
+    endArrowFill: missing ? STATUS_COLORS.missing : provides ? '#22c55e' : color,
     endArrowSize: 5,
     lineCap: 'round',
   }
@@ -188,7 +198,9 @@ function tooltipContent(items: Array<NodeData | EdgeData>, t: (key: RuntimeLocal
     eyebrow.append(tooltipPill(t('edgeTypes'), 'dsh-runtime-g6-tooltip__category'))
     const title = document.createElement('strong')
     title.className = 'dsh-runtime-g6-tooltip__title'
-    title.textContent = metadata.kind === 'missing' ? t('edgeMissing') : t('edgeInjects')
+    title.textContent = metadata.kind === 'missing'
+      ? t('edgeMissing')
+      : metadata.kind === 'provides' ? t('edgeProvides') : t('edgeInjects')
     const services = document.createElement('span')
     services.className = 'dsh-runtime-g6-tooltip__module'
     services.textContent = metadata.services.join(' · ')
@@ -219,6 +231,8 @@ function tooltipContent(items: Array<NodeData | EdgeData>, t: (key: RuntimeLocal
   moduleName.className = 'dsh-runtime-g6-tooltip__module'
   moduleName.textContent = metadata.kind === 'missing-service'
     ? metadata.service ?? metadata.label
+    : metadata.kind === 'service'
+      ? `${t('provider')}: ${metadata.providerEntryId ?? t('unavailable')}`
     : metadata.moduleName ?? metadata.label
   element.append(accent, eyebrow, title, moduleName)
   if (metadata.kind === 'plugin') {
@@ -237,6 +251,20 @@ function tooltipContent(items: Array<NodeData | EdgeData>, t: (key: RuntimeLocal
       const label = document.createElement('dt')
       label.textContent = t(key)
       stat.append(count, label)
+      stats.append(stat)
+    }
+    element.append(stats)
+  } else if (metadata.kind === 'service') {
+    const stats = document.createElement('dl')
+    stats.className = 'dsh-runtime-g6-tooltip__stats'
+    for (const [label, value] of [[t('providers'), 1], [t('consumers'), metadata.consumerCount ?? 0]] as const) {
+      const stat = document.createElement('div')
+      stat.className = 'dsh-runtime-g6-tooltip__stat'
+      const count = document.createElement('dd')
+      count.textContent = String(value)
+      const title = document.createElement('dt')
+      title.textContent = label
+      stat.append(count, title)
       stats.append(stat)
     }
     element.append(stats)
@@ -324,13 +352,14 @@ function graphOptions(
 }
 
 export function RuntimeGraphCanvas({
-  nodes, edges, relations, selectedId, savedPositions, graphLabel, phaseLabel, onSelect,
+  nodes, edges, services, serviceRelations, relations, focus, savedPositions, graphLabel, phaseLabel, onSelect,
   onPositionsChange, onResetPositions, categoryFilter, onCategoryFilterChange, t,
 }: RuntimeGraphCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const graphRef = useRef<Graph>()
   const topologyRef = useRef<string>()
-  const selectedRef = useRef(selectedId)
+  const focusKey = focus === undefined ? undefined : `${focus.kind}:${focus.id}`
+  const selectedRef = useRef(focusKey)
   const callbacksRef = useRef({ onSelect, onPositionsChange })
   const dataRef = useRef<ReturnType<typeof buildRuntimeG6Data>>()
   const nodesRef = useRef(nodes)
@@ -342,8 +371,10 @@ export function RuntimeGraphCanvas({
   savedPositionsRef.current = savedPositions
 
   const data = useMemo(
-    () => buildRuntimeG6Data(nodes, edges, relations, selectedId, savedPositions),
-    [edges, nodes, relations, savedPositions, selectedId],
+    () => buildRuntimeG6Data(
+      nodes, edges, services, serviceRelations, relations, focus, savedPositions, categoryFilter === 'service',
+    ),
+    [categoryFilter, edges, focus, nodes, relations, savedPositions, serviceRelations, services],
   )
   dataRef.current = data
 
@@ -371,7 +402,12 @@ export function RuntimeGraphCanvas({
       graphRef.current = graph
       graph.on('node:click', (event: IElementEvent) => {
         const id = String(event.target.id)
-        if (!id.startsWith('missing:')) callbacksRef.current.onSelect(id)
+        if (id.startsWith('missing:')) return
+        if (id.startsWith('service:')) {
+          callbacksRef.current.onSelect({ kind: 'service', id: id.slice('service:'.length) })
+          return
+        }
+        callbacksRef.current.onSelect({ kind: 'plugin', id })
       })
       const hideRuntimeTooltip = (): void => {
         const tooltip = graph.getPluginInstance('runtime-tooltip') as unknown as { hide?: () => void } | undefined
@@ -408,18 +444,34 @@ export function RuntimeGraphCanvas({
     if (graph === undefined) return
     let disposed = false
     const topology = runtimeG6TopologyKey(data)
-    const selectionChanged = selectedRef.current !== selectedId
-    selectedRef.current = selectedId
+    const selectionChanged = selectedRef.current !== focusKey
+    selectedRef.current = focusKey
     void syncRuntimeG6Data(graph, data, topologyRef.current).then(async () => {
       if (disposed) return
       topologyRef.current = topology
-      if (selectionChanged && selectedId !== undefined) {
+      if (selectionChanged && focusKey !== undefined) {
+        // The inspector is mounted in the same commit and narrows the graph
+        // column. Synchronize G6's canvas dimensions before calculating the
+        // first focused viewport so it does not center against the old width.
+        graph.resize()
+        // Structural focus changes reuse many plugin ids from the full graph.
+        // G6 otherwise keeps their old global coordinates while new Service
+        // nodes start at the origin, so fitting can omit most of the focused
+        // topology. Re-run the configured collision layout before fitting.
+        await graph.layout()
         await graph.fitView({ when: 'always', direction: 'both' }, { duration: 220, easing: 'ease-out' })
+        // The inspector changes the canvas width in the same commit. Let its
+        // ResizeObserver settle, then fit once more so the selected hub and
+        // newly materialized Service satellites remain fully visible.
+        await new Promise<void>(resolve => window.setTimeout(resolve, 180))
+        if (disposed) return
+        graph.resize()
+        await graph.fitView({ when: 'always', direction: 'both' }, { duration: 180, easing: 'ease-out' })
         if (!disposed) setZoom(graph.getZoom())
       }
     }).catch(() => { if (!disposed) setRendererFailed(true) })
     return () => { disposed = true }
-  }, [data, selectedId])
+  }, [data, focusKey])
 
   const zoomTo = async (next: number): Promise<void> => {
     const graph = graphRef.current
@@ -430,6 +482,7 @@ export function RuntimeGraphCanvas({
   const fitView = async (): Promise<void> => {
     const graph = graphRef.current
     if (graph === undefined) return
+    graph.resize()
     await graph.fitView({ when: 'always', direction: 'both' }, { duration: 220, easing: 'ease-out' })
     setZoom(graph.getZoom())
   }
@@ -461,13 +514,18 @@ export function RuntimeGraphCanvas({
         ))}
       </div>
       <ul className={css.graphA11yList} aria-label={graphLabel}>
-        {nodes.map(node => (
-          <li key={node.id}>
-            <button type="button" onClick={() => { onSelect(node.id) }}>
-              {node.label}, {phaseLabel(node.phase)}
+        {data.nodes.flatMap((node) => {
+          const metadata = runtimeG6NodeMetadata(node)
+          if (metadata.kind === 'missing-service') return []
+          const selection: RuntimeG6Focus = metadata.kind === 'service'
+            ? { kind: 'service', id: String(node.id).slice('service:'.length) }
+            : { kind: 'plugin', id: String(node.id) }
+          return [<li key={String(node.id)}>
+            <button type="button" onClick={() => { onSelect(selection) }}>
+              {metadata.label}, {phaseLabel(metadata.phase as RuntimeFiberPhase)}
             </button>
-          </li>
-        ))}
+          </li>]
+        })}
       </ul>
       <div className={css.zoomControls} role="group" aria-label={t('zoomControls')}>
         <Tooltip label={t('zoomOut')} side="top" delayMs={400}>

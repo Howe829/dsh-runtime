@@ -1,11 +1,11 @@
 /** Pure G6 projection and update policy for the Runtime Explorer graph canvas. */
 import type { EdgeData, GraphData, NodeData } from '@antv/g6';
-import type { RuntimeGraphEdge, RuntimeGraphNode } from '@deepseek-ai/dsh-api-remotes/client';
+import type { RuntimeGraphEdge, RuntimeGraphNode, RuntimeGraphServiceNode, RuntimeGraphServiceRelation } from '@deepseek-ai/dsh-api-remotes/client';
 import type { RuntimeGraphRelations, RuntimeGraphSavedPositions } from './graph.ts';
 import { runtimeLifecycleStatus } from './graph.ts';
-export type RuntimeG6NodeKind = 'plugin' | 'missing-service';
+export type RuntimeG6NodeKind = 'plugin' | 'service' | 'missing-service';
 /** Visual role inferred from the plugin package name and its runtime label. */
-export type RuntimeG6NodeCategory = 'core' | 'agent' | 'model' | 'tool' | 'session' | 'interface' | 'extension' | 'missing';
+export type RuntimeG6NodeCategory = 'core' | 'agent' | 'model' | 'tool' | 'session' | 'interface' | 'extension' | 'service' | 'missing';
 export interface RuntimeG6NodeMetadata {
     readonly kind: RuntimeG6NodeKind;
     readonly label: string;
@@ -21,10 +21,13 @@ export interface RuntimeG6NodeMetadata {
     readonly missing: readonly string[];
     readonly effectCount: number;
     readonly service?: string;
+    readonly providerNodeId?: string;
+    readonly providerEntryId?: string;
+    readonly consumerCount?: number;
     readonly order?: number;
 }
 export interface RuntimeG6EdgeMetadata {
-    readonly kind: 'injects' | 'missing';
+    readonly kind: 'injects' | 'provides' | 'missing';
     readonly relation?: string;
     readonly services: readonly string[];
 }
@@ -32,14 +35,22 @@ export interface RuntimeG6GraphData extends GraphData {
     readonly nodes: NodeData[];
     readonly edges: EdgeData[];
 }
+/** The graph focus can be either a Loader plugin or one exact scoped Service implementation. */
+export type RuntimeG6Focus = {
+    readonly kind: 'plugin';
+    readonly id: string;
+} | {
+    readonly kind: 'service';
+    readonly id: string;
+};
 export declare const RUNTIME_G6_COLLISION_GAP = 24;
 /**
  * Infer a stable, explainable visual category from DSH package conventions.
  * The fallback deliberately stays neutral for third-party plugins.
  */
-export declare function runtimeG6NodeCategory(moduleName: string, label: string): RuntimeG6NodeCategory;
+export declare function runtimeG6NodeCategory(moduleName: string, label: string): Exclude<RuntimeG6NodeCategory, 'service' | 'missing'>;
 /** Keep the exact plugin name while preferring semantic line breaks inside circles. */
-export declare function runtimeG6DisplayLabel(label: string): string;
+export declare function runtimeG6DisplayLabel(label: string, maxLineLength?: number): string;
 /** Scale hubs without allowing high-degree plugins to dominate the canvas. */
 export declare function runtimeG6NodeSize(degree: number, selected?: boolean, label?: string): number;
 /** Collision radius passed to G6, including label-safe whitespace around each circle. */
@@ -52,7 +63,9 @@ export declare function runtimeG6EdgeMetadata(edge: EdgeData): RuntimeG6EdgeMeta
  * Project the Host graph into G6 data while keeping product state out of the renderer.
  * Missing Cordis providers become explicit satellite nodes only around the selected plugin.
  */
-export declare function buildRuntimeG6Data(nodes: readonly RuntimeGraphNode[], edges: readonly RuntimeGraphEdge[], relations: RuntimeGraphRelations, selectedId: string | undefined, savedPositions: RuntimeGraphSavedPositions): RuntimeG6GraphData;
+export declare function buildRuntimeG6Data(nodes: readonly RuntimeGraphNode[], edges: readonly RuntimeGraphEdge[], services: readonly RuntimeGraphServiceNode[], serviceRelations: readonly RuntimeGraphServiceRelation[], relations: RuntimeGraphRelations, focus: RuntimeG6Focus | undefined, savedPositions: RuntimeGraphSavedPositions, showAllServices?: boolean): RuntimeG6GraphData;
+/** Count concrete scoped Service nodes currently materialized in focus mode. */
+export declare function runtimeG6VisibleServiceCount(data: RuntimeG6GraphData): number;
 /** Topology identity used to distinguish live status refreshes from structural changes. */
 export declare function runtimeG6TopologyKey(data: RuntimeG6GraphData): string;
 export interface RuntimeG6GraphPort {

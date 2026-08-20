@@ -13,6 +13,12 @@ export interface Config {
     effectLimit?: number;
     /** Browser snapshot refresh cadence while the explorer is open. @default 1500 */
     refreshIntervalMs?: number;
+    /** Rolling Effect activity window in milliseconds. @default 300000 */
+    activityWindowMs?: number;
+    /** Effect trend bucket width in milliseconds. @default 10000 */
+    activityBucketMs?: number;
+    /** Maximum Effect lifecycle transitions retained in memory. @default 4096 */
+    activityTransitionLimit?: number;
 }
 export declare function projectServiceOverview(implementations: readonly {
     name: string;
@@ -38,7 +44,15 @@ export declare class RuntimeExplorerGateway extends TypertRemoteService {
     static Config: z<Config>;
     private readonly resolved;
     private readonly trace;
+    private readonly activityStartedAt;
+    private readonly effectOwners;
+    private readonly effectTransitions;
+    private nextEffectId;
+    private nextTransitionId;
+    private droppedTransitions;
+    private lastDroppedAt;
     constructor(ctx: Context, config: Config);
+    private captureEffectTransition;
     /**
      * Read live Loader state and the bounded event-metadata window.
      * @returns A point-in-time graph and trace containing no message, model-output, tool-argument, or tool-result content.

@@ -28,6 +28,7 @@ const NODE_CATEGORY_COLORS = {
     session: { fill: '#b45309', stroke: '#fcd34d' },
     interface: { fill: '#be185d', stroke: '#f9a8d4' },
     extension: { fill: '#334155', stroke: '#94a3b8' },
+    service: { fill: '#155e75', stroke: '#67e8f9' },
     missing: { fill: '#991b1b', stroke: '#fca5a5' },
 };
 const NODE_CATEGORY_KEYS = [
@@ -38,6 +39,7 @@ const NODE_CATEGORY_KEYS = [
     ['session', 'categorySession'],
     ['interface', 'categoryInterface'],
     ['extension', 'categoryExtension'],
+    ['service', 'serviceNode'],
 ];
 const NODE_CATEGORY_LOCALE_KEYS = {
     core: 'categoryCore',
@@ -47,10 +49,12 @@ const NODE_CATEGORY_LOCALE_KEYS = {
     session: 'categorySession',
     interface: 'categoryInterface',
     extension: 'categoryExtension',
+    service: 'serviceNode',
     missing: 'missingService',
 };
 const EDGE_LEGEND_ITEMS = [
     ['injects', 'edgeInjects'],
+    ['provides', 'edgeProvides'],
     ['dependency', 'dependencies'],
     ['dependant', 'dependants'],
     ['missing', 'edgeMissing'],
@@ -66,23 +70,24 @@ function nodeStyle(datum) {
         ? categoryColor.stroke
         : RELATION_COLORS[metadata.relation] ?? statusColor;
     const missing = metadata.kind === 'missing-service';
+    const service = metadata.kind === 'service';
     return {
         size: metadata.size,
         fill: categoryColor.fill,
         stroke: relationColor,
         lineWidth: metadata.relation === 'selected' ? 3 : 1.5,
         lineDash: missing ? [5, 4] : undefined,
-        cursor: missing ? 'default' : 'grab',
+        cursor: missing ? 'default' : service ? 'pointer' : 'grab',
         shadowColor: metadata.relation === 'selected' ? 'rgba(99, 149, 255, 0.34)' : 'rgba(0, 0, 0, 0.28)',
         shadowBlur: metadata.relation === 'selected' ? 18 : 8,
         zIndex: 2,
         icon: false,
         label: true,
-        labelText: runtimeG6DisplayLabel(metadata.label),
+        labelText: runtimeG6DisplayLabel(metadata.label, service ? 10 : 13),
         labelPlacement: 'center',
         labelFill: '#ffffff',
         labelFontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
-        labelFontSize: missing ? 9 : metadata.size >= 96 ? 11 : 10,
+        labelFontSize: missing ? 9 : service ? 9 : metadata.size >= 96 ? 11 : 10,
         labelFontWeight: 600,
         labelLineHeight: missing ? 10 : 12,
         labelMaxLines: 3,
@@ -108,6 +113,7 @@ function edgeStyle(datum) {
         ? '#555a64'
         : RELATION_COLORS[metadata.relation] ?? '#555a64';
     const missing = metadata.kind === 'missing';
+    const provides = metadata.kind === 'provides';
     const lineDash = missing
         ? [6, 4]
         : metadata.relation === 'dependant'
@@ -116,13 +122,13 @@ function edgeStyle(datum) {
                 ? [2, 3]
                 : undefined;
     return {
-        stroke: missing ? STATUS_COLORS.missing : color,
+        stroke: missing ? STATUS_COLORS.missing : provides ? '#22c55e' : color,
         zIndex: 0,
         lineWidth: metadata.relation === undefined ? 1 : 1.5,
         opacity: metadata.relation === undefined ? 0.38 : 0.74,
         lineDash,
         endArrow: true,
-        endArrowFill: missing ? STATUS_COLORS.missing : color,
+        endArrowFill: missing ? STATUS_COLORS.missing : provides ? '#22c55e' : color,
         endArrowSize: 5,
         lineCap: 'round',
     };
@@ -151,7 +157,9 @@ function tooltipContent(items, t) {
         eyebrow.append(tooltipPill(t('edgeTypes'), 'dsh-runtime-g6-tooltip__category'));
         const title = document.createElement('strong');
         title.className = 'dsh-runtime-g6-tooltip__title';
-        title.textContent = metadata.kind === 'missing' ? t('edgeMissing') : t('edgeInjects');
+        title.textContent = metadata.kind === 'missing'
+            ? t('edgeMissing')
+            : metadata.kind === 'provides' ? t('edgeProvides') : t('edgeInjects');
         const services = document.createElement('span');
         services.className = 'dsh-runtime-g6-tooltip__module';
         services.textContent = metadata.services.join(' · ');
@@ -176,7 +184,9 @@ function tooltipContent(items, t) {
     moduleName.className = 'dsh-runtime-g6-tooltip__module';
     moduleName.textContent = metadata.kind === 'missing-service'
         ? metadata.service ?? metadata.label
-        : metadata.moduleName ?? metadata.label;
+        : metadata.kind === 'service'
+            ? `${t('provider')}: ${metadata.providerEntryId ?? t('unavailable')}`
+            : metadata.moduleName ?? metadata.label;
     element.append(accent, eyebrow, title, moduleName);
     if (metadata.kind === 'plugin') {
         const stats = document.createElement('dl');
@@ -194,6 +204,21 @@ function tooltipContent(items, t) {
             const label = document.createElement('dt');
             label.textContent = t(key);
             stat.append(count, label);
+            stats.append(stat);
+        }
+        element.append(stats);
+    }
+    else if (metadata.kind === 'service') {
+        const stats = document.createElement('dl');
+        stats.className = 'dsh-runtime-g6-tooltip__stats';
+        for (const [label, value] of [[t('providers'), 1], [t('consumers'), metadata.consumerCount ?? 0]]) {
+            const stat = document.createElement('div');
+            stat.className = 'dsh-runtime-g6-tooltip__stat';
+            const count = document.createElement('dd');
+            count.textContent = String(value);
+            const title = document.createElement('dt');
+            title.textContent = label;
+            stat.append(count, title);
             stats.append(stat);
         }
         element.append(stats);
@@ -273,11 +298,12 @@ function graphOptions(container, data, onDragFinish, t) {
         ],
     };
 }
-export function RuntimeGraphCanvas({ nodes, edges, relations, selectedId, savedPositions, graphLabel, phaseLabel, onSelect, onPositionsChange, onResetPositions, categoryFilter, onCategoryFilterChange, t, }) {
+export function RuntimeGraphCanvas({ nodes, edges, services, serviceRelations, relations, focus, savedPositions, graphLabel, phaseLabel, onSelect, onPositionsChange, onResetPositions, categoryFilter, onCategoryFilterChange, t, }) {
     const containerRef = useRef(null);
     const graphRef = useRef();
     const topologyRef = useRef();
-    const selectedRef = useRef(selectedId);
+    const focusKey = focus === undefined ? undefined : `${focus.kind}:${focus.id}`;
+    const selectedRef = useRef(focusKey);
     const callbacksRef = useRef({ onSelect, onPositionsChange });
     const dataRef = useRef();
     const nodesRef = useRef(nodes);
@@ -287,7 +313,7 @@ export function RuntimeGraphCanvas({ nodes, edges, relations, selectedId, savedP
     callbacksRef.current = { onSelect, onPositionsChange };
     nodesRef.current = nodes;
     savedPositionsRef.current = savedPositions;
-    const data = useMemo(() => buildRuntimeG6Data(nodes, edges, relations, selectedId, savedPositions), [edges, nodes, relations, savedPositions, selectedId]);
+    const data = useMemo(() => buildRuntimeG6Data(nodes, edges, services, serviceRelations, relations, focus, savedPositions, categoryFilter === 'service'), [categoryFilter, edges, focus, nodes, relations, savedPositions, serviceRelations, services]);
     dataRef.current = data;
     useEffect(() => {
         const container = containerRef.current;
@@ -317,8 +343,13 @@ export function RuntimeGraphCanvas({ nodes, edges, relations, selectedId, savedP
             graphRef.current = graph;
             graph.on('node:click', (event) => {
                 const id = String(event.target.id);
-                if (!id.startsWith('missing:'))
-                    callbacksRef.current.onSelect(id);
+                if (id.startsWith('missing:'))
+                    return;
+                if (id.startsWith('service:')) {
+                    callbacksRef.current.onSelect({ kind: 'service', id: id.slice('service:'.length) });
+                    return;
+                }
+                callbacksRef.current.onSelect({ kind: 'plugin', id });
             });
             const hideRuntimeTooltip = () => {
                 const tooltip = graph.getPluginInstance('runtime-tooltip');
@@ -364,21 +395,38 @@ export function RuntimeGraphCanvas({ nodes, edges, relations, selectedId, savedP
             return;
         let disposed = false;
         const topology = runtimeG6TopologyKey(data);
-        const selectionChanged = selectedRef.current !== selectedId;
-        selectedRef.current = selectedId;
+        const selectionChanged = selectedRef.current !== focusKey;
+        selectedRef.current = focusKey;
         void syncRuntimeG6Data(graph, data, topologyRef.current).then(async () => {
             if (disposed)
                 return;
             topologyRef.current = topology;
-            if (selectionChanged && selectedId !== undefined) {
+            if (selectionChanged && focusKey !== undefined) {
+                // The inspector is mounted in the same commit and narrows the graph
+                // column. Synchronize G6's canvas dimensions before calculating the
+                // first focused viewport so it does not center against the old width.
+                graph.resize();
+                // Structural focus changes reuse many plugin ids from the full graph.
+                // G6 otherwise keeps their old global coordinates while new Service
+                // nodes start at the origin, so fitting can omit most of the focused
+                // topology. Re-run the configured collision layout before fitting.
+                await graph.layout();
                 await graph.fitView({ when: 'always', direction: 'both' }, { duration: 220, easing: 'ease-out' });
+                // The inspector changes the canvas width in the same commit. Let its
+                // ResizeObserver settle, then fit once more so the selected hub and
+                // newly materialized Service satellites remain fully visible.
+                await new Promise(resolve => window.setTimeout(resolve, 180));
+                if (disposed)
+                    return;
+                graph.resize();
+                await graph.fitView({ when: 'always', direction: 'both' }, { duration: 180, easing: 'ease-out' });
                 if (!disposed)
                     setZoom(graph.getZoom());
             }
         }).catch(() => { if (!disposed)
             setRendererFailed(true); });
         return () => { disposed = true; };
-    }, [data, selectedId]);
+    }, [data, focusKey]);
     const zoomTo = async (next) => {
         const graph = graphRef.current;
         if (graph === undefined)
@@ -390,12 +438,21 @@ export function RuntimeGraphCanvas({ nodes, edges, relations, selectedId, savedP
         const graph = graphRef.current;
         if (graph === undefined)
             return;
+        graph.resize();
         await graph.fitView({ when: 'always', direction: 'both' }, { duration: 220, easing: 'ease-out' });
         setZoom(graph.getZoom());
     };
     const reset = () => {
         onResetPositions();
     };
-    return (_jsxs("div", { className: css.graphCanvasShell, children: [_jsx("div", { ref: containerRef, className: css.graphCanvas, role: "img", "aria-label": graphLabel }), rendererFailed && _jsx("div", { className: css.graphRendererError, children: t('graphRendererFailed') }), _jsx("div", { className: css.nodeTypeLegend, "aria-label": t('pluginTypes'), children: NODE_CATEGORY_KEYS.map(([category, key]) => (_jsxs("button", { type: "button", "aria-pressed": categoryFilter === category, style: { '--runtime-node-color': NODE_CATEGORY_COLORS[category].stroke }, onClick: () => { onCategoryFilterChange(categoryFilter === category ? 'all' : category); }, children: [_jsx("i", { "aria-hidden": true }), t(key)] }, category))) }), _jsx("div", { className: css.edgeTypeLegend, "aria-label": t('edgeTypes'), children: EDGE_LEGEND_ITEMS.map(([kind, key]) => (_jsxs("span", { "data-edge-kind": kind, children: [_jsx("i", { "aria-hidden": true }), t(key)] }, kind))) }), _jsx("ul", { className: css.graphA11yList, "aria-label": graphLabel, children: nodes.map(node => (_jsx("li", { children: _jsxs("button", { type: "button", onClick: () => { onSelect(node.id); }, children: [node.label, ", ", phaseLabel(node.phase)] }) }, node.id))) }), _jsxs("div", { className: css.zoomControls, role: "group", "aria-label": t('zoomControls'), children: [_jsx(Tooltip, { label: t('zoomOut'), side: "top", delayMs: 400, children: _jsx("button", { type: "button", "aria-label": t('zoomOut'), disabled: zoom <= MIN_ZOOM + 0.01, onClick: () => { void zoomTo(zoom / ZOOM_STEP); }, children: _jsx(MagnifyingGlassMinusIcon, { "aria-hidden": "true", width: 18, height: 18 }) }) }), _jsxs("output", { "aria-label": t('zoomLevel'), "aria-live": "polite", children: [Math.round(zoom * 100), "%"] }), _jsx(Tooltip, { label: t('zoomIn'), side: "top", delayMs: 400, children: _jsx("button", { type: "button", "aria-label": t('zoomIn'), disabled: zoom >= MAX_ZOOM - 0.01, onClick: () => { void zoomTo(zoom * ZOOM_STEP); }, children: _jsx(MagnifyingGlassPlusIcon, { "aria-hidden": "true", width: 18, height: 18 }) }) }), _jsx(Tooltip, { label: t('fitView'), side: "top", delayMs: 400, children: _jsx("button", { type: "button", "aria-label": t('fitView'), onClick: () => { void fitView(); }, children: _jsx(ArrowsPointingInIcon, { "aria-hidden": "true", width: 18, height: 18 }) }) }), _jsx("button", { type: "button", onClick: reset, children: t('resetZoom') })] })] }));
+    return (_jsxs("div", { className: css.graphCanvasShell, children: [_jsx("div", { ref: containerRef, className: css.graphCanvas, role: "img", "aria-label": graphLabel }), rendererFailed && _jsx("div", { className: css.graphRendererError, children: t('graphRendererFailed') }), _jsx("div", { className: css.nodeTypeLegend, "aria-label": t('pluginTypes'), children: NODE_CATEGORY_KEYS.map(([category, key]) => (_jsxs("button", { type: "button", "aria-pressed": categoryFilter === category, style: { '--runtime-node-color': NODE_CATEGORY_COLORS[category].stroke }, onClick: () => { onCategoryFilterChange(categoryFilter === category ? 'all' : category); }, children: [_jsx("i", { "aria-hidden": true }), t(key)] }, category))) }), _jsx("div", { className: css.edgeTypeLegend, "aria-label": t('edgeTypes'), children: EDGE_LEGEND_ITEMS.map(([kind, key]) => (_jsxs("span", { "data-edge-kind": kind, children: [_jsx("i", { "aria-hidden": true }), t(key)] }, kind))) }), _jsx("ul", { className: css.graphA11yList, "aria-label": graphLabel, children: data.nodes.flatMap((node) => {
+                    const metadata = runtimeG6NodeMetadata(node);
+                    if (metadata.kind === 'missing-service')
+                        return [];
+                    const selection = metadata.kind === 'service'
+                        ? { kind: 'service', id: String(node.id).slice('service:'.length) }
+                        : { kind: 'plugin', id: String(node.id) };
+                    return [_jsx("li", { children: _jsxs("button", { type: "button", onClick: () => { onSelect(selection); }, children: [metadata.label, ", ", phaseLabel(metadata.phase)] }) }, String(node.id))];
+                }) }), _jsxs("div", { className: css.zoomControls, role: "group", "aria-label": t('zoomControls'), children: [_jsx(Tooltip, { label: t('zoomOut'), side: "top", delayMs: 400, children: _jsx("button", { type: "button", "aria-label": t('zoomOut'), disabled: zoom <= MIN_ZOOM + 0.01, onClick: () => { void zoomTo(zoom / ZOOM_STEP); }, children: _jsx(MagnifyingGlassMinusIcon, { "aria-hidden": "true", width: 18, height: 18 }) }) }), _jsxs("output", { "aria-label": t('zoomLevel'), "aria-live": "polite", children: [Math.round(zoom * 100), "%"] }), _jsx(Tooltip, { label: t('zoomIn'), side: "top", delayMs: 400, children: _jsx("button", { type: "button", "aria-label": t('zoomIn'), disabled: zoom >= MAX_ZOOM - 0.01, onClick: () => { void zoomTo(zoom * ZOOM_STEP); }, children: _jsx(MagnifyingGlassPlusIcon, { "aria-hidden": "true", width: 18, height: 18 }) }) }), _jsx(Tooltip, { label: t('fitView'), side: "top", delayMs: 400, children: _jsx("button", { type: "button", "aria-label": t('fitView'), onClick: () => { void fitView(); }, children: _jsx(ArrowsPointingInIcon, { "aria-hidden": "true", width: 18, height: 18 }) }) }), _jsx("button", { type: "button", onClick: reset, children: t('resetZoom') })] })] }));
 }
 //# sourceMappingURL=RuntimeGraphCanvas.js.map

@@ -39,8 +39,10 @@ vi.mock('../src/client/g6-runtime.ts', () => {
     setData(data: Graph['data']) { this.data = data }
     async render() { this.renderCalls += 1 }
     async draw() { this.drawCalls += 1 }
+    async layout() {}
     async fitView() {}
     async fitCenter() {}
+    resize() {}
     async zoomTo(zoom: number) { this.zoom = zoom }
     getZoom() { return this.zoom }
     getElementPosition(id: string) {
@@ -68,10 +70,30 @@ vi.mock('../src/client/g6-runtime.ts', () => {
 vi.mock('recharts', () => ({
   ResponsiveContainer: ({ children }: { children: ReactNode }) => <div data-testid="responsive-chart">{children}</div>,
   BarChart: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  Bar: ({ dataKey }: { dataKey: string }) => <span data-bar={dataKey} />,
+  Bar: ({ dataKey, fill, barSize }: { dataKey: string, fill?: string, barSize?: number }) => <span
+    data-bar={dataKey}
+    data-fill={fill}
+    data-size={barSize}
+  />,
+  Area: ({ dataKey }: { dataKey: string }) => <span data-area={dataKey} />,
+  CartesianGrid: () => <span data-testid="cartesian-grid" />,
+  ComposedChart: ({ children, margin }: {
+    children: ReactNode
+    margin?: { top?: number, right?: number, bottom?: number, left?: number }
+  }) => <div data-testid="composed-chart" data-left-margin={margin?.left}>{children}</div>,
+  ReferenceLine: ({ y }: { y?: number }) => <span data-testid="reference-line" data-y={y} />,
   XAxis: () => null,
-  YAxis: () => null,
+  YAxis: ({ width, tickMargin }: { width?: number, tickMargin?: number }) => <span
+    data-testid="y-axis"
+    data-width={width}
+    data-tick-margin={tickMargin}
+  />,
   Tooltip: () => null,
+  LineChart: ({ children, margin }: {
+    children: ReactNode
+    margin?: { top?: number, right?: number, bottom?: number, left?: number }
+  }) => <div data-testid="line-chart" data-left-margin={margin?.left}>{children}</div>,
+  Line: ({ dataKey }: { dataKey: string }) => <span data-line={dataKey} />,
 }))
 
 afterEach(() => {
@@ -83,7 +105,7 @@ afterEach(() => {
 const t = ((key: RuntimeLocaleKey): string => en[key]) as RuntimeExplorerProps['t']
 
 const DATA: RuntimeExplorerSnapshot = {
-  schemaVersion: 3,
+  schemaVersion: 5,
   bootId: 'fixture-boot',
   snapshotSeq: 1,
   profile: 'fixture-web',
@@ -122,6 +144,43 @@ const DATA: RuntimeExplorerSnapshot = {
       ],
     },
   },
+  effectActivity: {
+    windowMs: 300_000,
+    availableSince: 0,
+    complete: true,
+    droppedTransitions: 0,
+    current: 27,
+    created: 145,
+    disposed: 118,
+    delta: 27,
+    churn: 263,
+    plugins: [
+      {
+        pluginId: 'web', entryId: 'web-entry', moduleName: '@fixture/web', label: 'web',
+        current: 9, created: 14, disposed: 9, delta: 5, churn: 23,
+        trend: [
+          { time: 0, current: 4, created: 0, disposed: 0 },
+          { time: 50, current: 7, created: 4, disposed: 1 },
+          { time: 100, current: 9, created: 3, disposed: 1 },
+        ],
+      },
+      {
+        pluginId: 'session', entryId: 'session-entry', moduleName: '@fixture/session', label: 'session',
+        current: 7, created: 41, disposed: 39, delta: 2, churn: 80,
+        trend: [
+          { time: 0, current: 5, created: 0, disposed: 0 },
+          { time: 100, current: 7, created: 41, disposed: 39 },
+        ],
+      },
+    ],
+    recent: [
+      {
+        id: 'transition-1', effectId: 'effect-1', action: 'created', time: 100,
+        pluginId: 'web', entryId: 'web-entry', moduleName: '@fixture/web', pluginLabel: 'web',
+        fiberId: 'fixture-boot:12', effectLabel: 'ctx.on("request")',
+      },
+    ],
+  },
   graph: {
     nodes: [
       {
@@ -141,6 +200,13 @@ const DATA: RuntimeExplorerSnapshot = {
       },
     ],
     edges: [{ id: 'injects:consumer->provider', type: 'injects', source: 'consumer', target: 'provider', services: ['llm'] }],
+    services: [{
+      id: 'service-llm', name: 'llm', providerNodeId: 'provider', providerEntryId: 'provider-entry', phase: 'active',
+    }],
+    serviceRelations: [{
+      id: 'service:consumer->service-llm', serviceNodeId: 'service-llm', service: 'llm',
+      consumerNodeId: 'consumer', providerNodeId: 'provider',
+    }],
   },
   trace: [
     {
@@ -176,12 +242,12 @@ const DATA: RuntimeExplorerSnapshot = {
     fiberInstances: false,
     ownershipEdges: false,
     scopes: false,
-    lifecycleTransitions: false,
+    lifecycleTransitions: true,
     turnPluginAttribution: false,
     eventDispatch: 'none',
     payloadCapture: false,
   },
-  limits: { transitionLimit: 0, traceEventLimit: 256 },
+  limits: { transitionLimit: 4096, traceEventLimit: 256 },
 }
 
 function sourceHook(snapshot: RuntimeSourceSnapshot) {
@@ -263,6 +329,27 @@ describe('RuntimeExplorer', () => {
     expect(metrics.getByText(en.turns).nextElementSibling?.textContent).toBe('136')
     expect(metrics.getByText(en.effects).nextElementSibling?.textContent).toBe('31')
     expect(metrics.getByText(en.events).nextElementSibling?.textContent).toBe('428')
+    const activity = within(screen.getByLabelText(en.pluginActivity))
+    expect(activity.getByRole('button', { name: /web/ })).toBeTruthy()
+    expect(activity.getByRole('button', { name: /session/ })).toBeTruthy()
+    fireEvent.click(activity.getByRole('button', { name: /web/ }))
+    expect(screen.getByRole('heading', { name: 'web' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: en.recentEffects })).toBeTruthy()
+    expect(screen.getByText('ctx.on("request")')).toBeTruthy()
+    expect(screen.getAllByText(en.currentEffects)[0]?.nextElementSibling?.textContent).toBe('9')
+    const trendChartElement = screen.getByTestId('composed-chart')
+    const trendChart = within(trendChartElement)
+    expect(trendChartElement.getAttribute('data-left-margin')).toBe('4')
+    expect(trendChart.getAllByTestId('y-axis')[0]?.getAttribute('data-width')).toBe('38')
+    expect(trendChart.getAllByTestId('y-axis')[0]?.getAttribute('data-tick-margin')).toBe('7')
+    expect(trendChart.getByTestId('cartesian-grid')).toBeTruthy()
+    expect(trendChartElement.querySelector('[data-area="current"]')).toBeTruthy()
+    expect(trendChartElement.querySelector('[data-bar="created"]')).toBeTruthy()
+    expect(trendChartElement.querySelector('[data-bar="disposed"]')?.getAttribute('data-fill')).toBe('var(--dsw-alias-state-warn-primary)')
+    expect(trendChartElement.querySelector('[data-bar="disposed"]')?.getAttribute('data-size')).toBe('5')
+    expect(trendChart.getByTestId('reference-line').getAttribute('data-y')).toBe('4')
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(en.backToActivity) }))
+    expect(screen.getByLabelText(en.pluginActivity)).toBeTruthy()
     const loader = within(screen.getByLabelText(en.loaderTitle))
     expect(loader.getByRole('heading', { name: 'Plugins' })).toBeTruthy()
     expect(loader.getByText('18').parentElement?.textContent).toContain(en.pluginsUnit)
@@ -287,26 +374,52 @@ describe('RuntimeExplorer', () => {
     expect(b.store.getSnapshot()).toMatchObject({ tab: 'graph', phase: 'failed', category: 'all' })
   })
 
+  it('replaces an empty lifecycle chart with a stable-current explanation', () => {
+    const plugin = DATA.effectActivity.plugins[0]!
+    const quietData: RuntimeExplorerSnapshot = {
+      ...DATA,
+      effectActivity: {
+        ...DATA.effectActivity,
+        current: plugin.current,
+        created: 0,
+        disposed: 0,
+        delta: 0,
+        churn: 0,
+        plugins: [{
+          ...plugin,
+          created: 0,
+          disposed: 0,
+          delta: 0,
+          churn: 0,
+          trend: [{ time: 100, current: plugin.current, created: 0, disposed: 0 }],
+        }],
+        recent: [],
+      },
+    }
+    explorer({ data: quietData, loading: false, error: undefined })
+    fireEvent.click(screen.getByRole('button', { name: 'Overview' }))
+    fireEvent.click(within(screen.getByLabelText(en.pluginActivity)).getByRole('button', { name: /web/ }))
+    expect(screen.getByRole('status').textContent).toContain(en.activityNoChanges.replace('{minutes}', '5'))
+    expect(screen.queryByTestId('composed-chart')).toBeNull()
+  })
+
   it('filters the real graph projection, selects a plugin, and renders service/effect diagnostics', async () => {
     const b = explorer()
     expect(screen.getByRole('heading', { name: en.title })).toBeTruthy()
     expect(screen.queryByText('Runtime Explorer')).toBeNull()
     expect(screen.getByLabelText(`${en.currentProfile}: fixture-web`).textContent).toBe('Profilefixture-web')
     expect(screen.getByRole('img', { name: en.graphLabel })).toBeTruthy()
-    const summary = within(screen.getByLabelText(en.pluginSummary))
-    expect(summary.getByText(en.pending).nextElementSibling?.textContent).toBe('1')
-    expect(summary.getByText(en.active).nextElementSibling?.textContent).toBe('1')
-    expect(summary.getByText(en.disposed).nextElementSibling?.textContent).toBe('1')
-    expect(summary.getByText(en.failed).nextElementSibling?.textContent).toBe('0')
+    expect(screen.queryByLabelText(en.pluginSummary)).toBeNull()
     const filter = screen.getByLabelText(en.allStates)
     expect(within(filter).getAllByRole('option').map(option => option.textContent)).toEqual([
       en.allStates, en.pending, en.active, en.disposed, en.failed,
     ])
     await waitFor(() => expect(g6State.instances).toHaveLength(1))
-    const graph = g6State.instances[0]!
+    let graph = g6State.instances[0]!
     expect(graph.data.nodes.map(node => node.id)).not.toContain('missing:consumer:tools')
     fireEvent.click(screen.getByRole('button', { name: /consumer/ }))
     expect(screen.getByText('consumer-entry')).toBeTruthy()
+    expect(screen.getByLabelText(`${en.status}: ${en.pending}`)).toBeTruthy()
     expect(screen.getAllByText('tools').length).toBeGreaterThanOrEqual(2)
     expect(screen.getByText(en.missing)).toBeTruthy()
     expect(screen.getByText(en.waitingForServices)).toBeTruthy()
@@ -316,12 +429,17 @@ describe('RuntimeExplorer', () => {
     expect(screen.getByText((_, element) => (
       element?.tagName === 'SPAN' && element.textContent === `${en.relatedPlugins} 2 / 3`
     ))).toBeTruthy()
+    expect(screen.getByText((_, element) => (
+      element?.tagName === 'SPAN' && element.textContent === `${en.relatedServices} 1 / 15`
+    ))).toBeTruthy()
+    await waitFor(() => expect(g6State.instances).toHaveLength(2))
+    graph = g6State.instances.at(-1)!
     await waitFor(() => expect(graph.data.nodes.map(node => node.id).sort()).toEqual([
-      'consumer', 'missing:consumer:tools', 'provider',
+      'consumer', 'missing:consumer:tools', 'provider', 'service:service-llm',
     ]))
     expect(graph.data.edges.some(edge => edge.data.services.includes('llm'))).toBe(true)
-    expect(screen.getAllByText(en.dependencies)).toHaveLength(2)
-    expect(screen.getAllByText(en.dependants)).toHaveLength(2)
+    expect(screen.getAllByText(en.dependencies)).toHaveLength(1)
+    expect(screen.getAllByText(en.dependants)).toHaveLength(1)
     fireEvent.click(screen.getByRole('button', { name: en.closeInspector }))
     expect(screen.queryByText('consumer-entry')).toBeNull()
     expect(screen.getByRole('button', { name: /unmounted/ })).toBeTruthy()
@@ -341,6 +459,7 @@ describe('RuntimeExplorer', () => {
     const snapshot: RuntimeExplorerSnapshot = {
       ...DATA,
       graph: {
+        ...DATA.graph,
         nodes: [
           DATA.graph.nodes[0]!,
           {
@@ -380,6 +499,80 @@ describe('RuntimeExplorer', () => {
     fireEvent.click(toolFilter)
     expect(b.store.getSnapshot().category).toBe('all')
     expect(screen.getByRole('button', { name: /provider/ })).toBeTruthy()
+
+    const serviceFilter = within(screen.getByLabelText(en.pluginTypes))
+      .getByRole('button', { name: en.serviceNode })
+    expect(serviceFilter.getAttribute('aria-pressed')).toBe('false')
+    fireEvent.click(serviceFilter)
+    expect(b.store.getSnapshot().category).toBe('service')
+    expect(within(screen.getByLabelText(en.pluginTypes))
+      .getByRole('button', { name: en.serviceNode }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('button', { name: /^llm,/ })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /provider/ })).toBeNull()
+    expect(screen.getByText(en.filteredType).parentElement?.textContent).toBe(`${en.filteredType}${en.serviceNode}`)
+    expect(screen.getByText((_, element) => (
+      element?.tagName === 'SPAN' && element.textContent === `${en.visiblePlugins} 1 / 15`
+    ))).toBeTruthy()
+  })
+
+  it('selects a scoped Service node and focuses its provider plus every consumer', async () => {
+    const consumerTwo = {
+      ...DATA.graph.nodes[1]!,
+      id: 'consumer-two', logicalKey: 'consumer-two', entryId: 'consumer-two-entry',
+      moduleName: '@fixture/consumer-two', label: 'consumer-two', phase: 'active' as const,
+      injects: ['llm'], missing: [],
+    }
+    const snapshot: RuntimeExplorerSnapshot = {
+      ...DATA,
+      graph: {
+        ...DATA.graph,
+        nodes: [...DATA.graph.nodes, consumerTwo],
+        edges: [
+          ...DATA.graph.edges,
+          { id: 'injects:consumer-two->provider', type: 'injects', source: 'consumer-two', target: 'provider', services: ['llm'] },
+        ],
+        serviceRelations: [
+          ...DATA.graph.serviceRelations,
+          {
+            id: 'service:consumer-two->service-llm', serviceNodeId: 'service-llm', service: 'llm',
+            consumerNodeId: 'consumer-two', providerNodeId: 'provider',
+          },
+        ],
+      },
+    }
+    const b = explorer({ data: snapshot, loading: false, error: undefined })
+    await waitFor(() => expect(g6State.instances).toHaveLength(1))
+
+    fireEvent.change(screen.getByPlaceholderText(en.searchGraph), { target: { value: 'consumer' } })
+    fireEvent.click(screen.getByRole('button', { name: /^consumer,/ }))
+    const serviceButton = await screen.findByRole('button', { name: /^llm,/ })
+    fireEvent.click(serviceButton)
+
+    expect(b.store.getSnapshot().selection).toEqual({ kind: 'service', id: 'service-llm' })
+    expect(screen.getByText(en.selectedService)).toBeTruthy()
+    expect(screen.getByLabelText(`${en.status}: ${en.active}`)).toBeTruthy()
+    expect(screen.getByText(en.focusedService).parentElement?.textContent).toBe(`${en.focusedService}llm`)
+    expect(screen.getByText((_, element) => (
+      element?.tagName === 'SPAN' && element.textContent === `${en.relatedPlugins} 3 / 4`
+    ))).toBeTruthy()
+    expect(screen.getByText((_, element) => (
+      element?.tagName === 'SPAN' && element.textContent === `${en.relatedServices} 1 / 15`
+    ))).toBeTruthy()
+    expect(screen.getByText('provider · @fixture/provider')).toBeTruthy()
+    expect(screen.getByText('consumer · @fixture/consumer')).toBeTruthy()
+    expect(screen.getByText('consumer-two · @fixture/consumer-two')).toBeTruthy()
+    expect(screen.queryByLabelText(en.relationDepth)).toBeNull()
+
+    await waitFor(() => expect(g6State.instances.length).toBeGreaterThanOrEqual(3))
+    const graph = g6State.instances.at(-1)!
+    await waitFor(() => expect(graph.data.nodes.map(node => node.id).sort()).toEqual([
+      'consumer', 'consumer-two', 'provider', 'service:service-llm',
+    ]))
+    expect(graph.data.edges.map(edge => edge.id).sort()).toEqual([
+      'injects:consumer->service-llm',
+      'injects:consumer-two->service-llm',
+      'provides:provider->service-llm',
+    ])
   })
 
   it('keeps graph selection consistent with search and offers an explicit show-all action', () => {
@@ -411,6 +604,7 @@ describe('RuntimeExplorer', () => {
     const extended: RuntimeExplorerSnapshot = {
       ...DATA,
       graph: {
+        ...DATA.graph,
         nodes: [root, provider, DATA.graph.nodes[1]!, leaf, DATA.graph.nodes[2]!],
         edges: [
           { id: 'injects:provider->root', type: 'injects', source: 'provider', target: 'root', services: ['core'] },
@@ -562,6 +756,7 @@ describe('RuntimeExplorer', () => {
       ...DATA,
       snapshotSeq: DATA.snapshotSeq + 1,
       graph: {
+        ...DATA.graph,
         nodes: DATA.graph.nodes.map(item => (
           item.id === 'provider' ? { ...item, phase: 'failed' as const } : { ...item }
         )),
@@ -592,6 +787,7 @@ describe('RuntimeExplorer', () => {
       ...DATA,
       snapshotSeq: DATA.snapshotSeq + 1,
       graph: {
+        ...DATA.graph,
         nodes: DATA.graph.nodes.filter(node => node.id !== 'consumer'),
         edges: [],
       },

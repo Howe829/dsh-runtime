@@ -3,7 +3,7 @@
 import type { RuntimeExplorerSnapshot } from '@deepseek-ai/dsh-api-remotes/client'
 import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
 
-const SUPPORTED_SCHEMA_VERSION = 3
+const SUPPORTED_SCHEMA_VERSION = 5
 
 /** Current browser view of the Host snapshot request lifecycle. */
 export interface RuntimeSourceSnapshot {

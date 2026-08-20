@@ -1,5 +1,5 @@
 /** Observable Remote snapshot with single-flight refresh and open-only polling. */
-const SUPPORTED_SCHEMA_VERSION = 3;
+const SUPPORTED_SCHEMA_VERSION = 5;
 /**
  * Build the browser source over the generated Remote call.
  * @param read - Invoke the mounted runtimeExplorer snapshot Remote.
