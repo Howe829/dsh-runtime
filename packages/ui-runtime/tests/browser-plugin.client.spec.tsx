@@ -49,17 +49,22 @@ const SNAPSHOT = {
   limits: { transitionLimit: 4096, traceEventLimit: 256 },
 }
 
-async function bench() {
+async function bench(withRuntimeExplorer = true) {
   const ctx = new Context()
   await ctx.plugin(SlotRegistry).await()
   ctx.provide('locale', new LocaleRuntime(ctx))
   class RemoteService extends Service {
     constructor(serviceCtx: Context) { super(serviceCtx, 'remote') }
+
+    readonly $mount = vi.fn(async () => {
+      ctx.provide('remote.runtimeExplorer', { snapshot })
+      return async () => undefined
+    })
   }
-  new RemoteService(ctx)
   const snapshot = vi.fn().mockResolvedValue({ ok: true, value: SNAPSHOT })
-  ctx.provide('remote.runtimeExplorer', { snapshot })
-  return { ctx, slots: ctx.get('slots') as SlotRegistry, snapshot }
+  const remote = new RemoteService(ctx)
+  if (withRuntimeExplorer) ctx.provide('remote.runtimeExplorer', { snapshot })
+  return { ctx, slots: ctx.get('slots') as SlotRegistry, snapshot, remote }
 }
 
 function declare(slots: SlotRegistry): () => void {
@@ -78,7 +83,7 @@ describe('ui-runtime browser plugin', () => {
   })
 
   it('registers both real DSH seats, reads lazily, and removes both contributions on unload', async () => {
-    expect(inject).toEqual(['slots', 'locale', 'remote', 'remote.runtimeExplorer'])
+    expect(inject).toEqual(['slots', 'locale', 'remote'])
     const b = await bench()
     declare(b.slots)
     const fiber = b.ctx.plugin({ inject: [...inject], apply })
@@ -105,6 +110,20 @@ describe('ui-runtime browser plugin', () => {
     await fiber.dispose()
     expect(b.slots.entries('sidebar.footer.action')).toHaveLength(0)
     expect(b.slots.entries('shell.overlay')).toHaveLength(0)
+    await b.ctx.fiber.dispose()
+  })
+
+  it('mounts its own generated Remote contribution when the aggregate does not provide it', async () => {
+    const b = await bench(false)
+    declare(b.slots)
+    const fiber = b.ctx.plugin({ inject: [...inject], apply })
+    await fiber.await()
+
+    expect(b.remote.$mount).toHaveBeenCalledOnce()
+    expect(b.remote.$mount).toHaveBeenCalledWith(expect.objectContaining({
+      package: '@deepseek-ai/dsh-runtime',
+      descriptors: [expect.objectContaining({ namespace: 'runtimeExplorer', method: 'snapshot' })],
+    }))
     await b.ctx.fiber.dispose()
   })
 

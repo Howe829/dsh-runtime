@@ -1,4 +1,5 @@
 /** dsh-runtime sidebar entry and frame overlay assembly. */
+import runtimeExplorerRemote from '@deepseek-ai/dsh-runtime/remote';
 import { en, zh } from "./locales.js";
 import { RuntimeAction } from "./RuntimeAction.js";
 import { RuntimeExplorer } from "./RuntimeExplorer.js";
@@ -7,9 +8,12 @@ import { createRuntimeStore } from "./store.js";
 export { createRuntimeStore } from "./store.js";
 const NS = 'runtime';
 /** Services required by the Remote source and both slot contributions. */
-export const inject = ['slots', 'locale', 'remote', 'remote.runtimeExplorer'];
+export const inject = ['slots', 'locale', 'remote'];
 /** Mount dsh-runtime as one sidebar action and one frame overlay. */
-export function apply(ctx) {
+export async function apply(ctx) {
+    if (ctx.get('remote.runtimeExplorer') === undefined) {
+        await ctx.effect(() => ctx.remote.$mount(runtimeExplorerRemote), 'ui-runtime: runtimeExplorer Remote contribution');
+    }
     ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-runtime: dictionaries');
     const store = createRuntimeStore();
     const source = createRuntimeSource(async () => {

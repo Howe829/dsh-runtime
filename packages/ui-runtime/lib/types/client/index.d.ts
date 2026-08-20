@@ -14,5 +14,5 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 /** Services required by the Remote source and both slot contributions. */
 export declare const inject: string[];
 /** Mount dsh-runtime as one sidebar action and one frame overlay. */
-export declare function apply(ctx: ClientContext): void;
+export declare function apply(ctx: ClientContext): Promise<void>;
 //# sourceMappingURL=index.d.ts.map

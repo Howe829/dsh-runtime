@@ -13,7 +13,9 @@
     "packages/*"
   ],
   "scripts": {
-    "verify": "node scripts/verify-repository.mjs",
-    "pack:dry-run": "npm pack --dry-run ./packages/runtime && npm pack --dry-run ./packages/ui-runtime"
+    "assemble": "node scripts/assemble-package.mjs",
+    "test": "node --test tests/independent-bundle.spec.mjs",
+    "verify": "npm run assemble && node scripts/verify-repository.mjs && npm test",
+    "pack:dry-run": "npm run assemble && npm pack --dry-run --cache ./artifacts/npm-cache ./packages/dsh-runtime"
   }
 }

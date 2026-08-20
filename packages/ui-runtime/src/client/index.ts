@@ -5,6 +5,7 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
+import runtimeExplorerRemote from '@deepseek-ai/dsh-runtime/remote'
 import type { RuntimeActionFace, RuntimeExplorerFace } from './faces.ts'
 import { en, zh, type RuntimeLocaleKey } from './locales.ts'
 import { RuntimeAction } from './RuntimeAction.tsx'
@@ -27,10 +28,16 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 const NS = 'runtime'
 
 /** Services required by the Remote source and both slot contributions. */
-export const inject = ['slots', 'locale', 'remote', 'remote.runtimeExplorer']
+export const inject = ['slots', 'locale', 'remote']
 
 /** Mount dsh-runtime as one sidebar action and one frame overlay. */
-export function apply(ctx: ClientContext): void {
+export async function apply(ctx: ClientContext): Promise<void> {
+  if (ctx.get('remote.runtimeExplorer') === undefined) {
+    await ctx.effect(
+      () => ctx.remote.$mount(runtimeExplorerRemote),
+      'ui-runtime: runtimeExplorer Remote contribution',
+    )
+  }
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-runtime: dictionaries')
   const store = createRuntimeStore()
   const source = createRuntimeSource(async () => {

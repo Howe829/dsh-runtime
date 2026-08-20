@@ -1,23 +1,32 @@
 # DeepSeek Harness integration
 
-The 0.1.0 plugin was validated with a sibling `deepseek-harness` checkout at
-commit `141eb6fef8`.
+`dsh-runtime` is an independent Profile Bundle. The package owns all four
+integration surfaces: the Host gateway, Web client, generated Remote
+contribution, and `cordis.patch.yml` layer.
 
-1. Place or link `packages/runtime` at `packages/extensions/runtime`.
-2. Place or link `packages/ui-runtime` at `packages/client/ui-runtime`.
-3. Add both package names to the Web app assembly dependencies.
-4. Add the entries from `cordis.patch.fragment.yml` to the Host and Client
-   plugin groups respectively.
-5. Mount `@deepseek-ai/dsh-runtime/remote` in the Client Remote assembly and
-   re-export the snapshot types from `@deepseek-ai/dsh-runtime/types`.
-6. Provide the selected launch profile through the optional `launchProfile`
-   Cordis service if the header should display the exact active profile.
-7. Add both package projects and their source aliases to the Host/Client
-   TypeScript aggregate configs.
-8. Use a Cordis build that emits the typed `internal/effect` create/dispose
-   lifecycle event. Without this instrumentation, live Effect totals remain
-   readable but window activity (`Created`, `Disposed`, `Delta`, and `Churn`)
-   is unavailable.
+## Install
 
-The plugin remains usable when `launchProfile` is absent; the profile badge is
-simply omitted. The Remote mount is required for snapshots and tracing.
+After a compatible release is available on npm:
+
+```sh
+dsh plugin --profile web add @howardchan/dsh-runtime
+```
+
+Restart the Web profile after installation. Removing the package withdraws its
+Host gateway and Web surface on the next restart.
+
+For a local checkout, assemble and pack the package first, then pass the
+resulting tarball to the same `dsh plugin` command. The source repository does
+not need to be copied into Harness.
+
+## Compatibility boundary
+
+Version `0.1.0` was validated against the local DSH `0.1.0-rc.8` package
+family. npm currently exposes only the older `0.0.1-rc.1` DSH family, so the
+public installation command above is a release target, not a claim that the
+older family is compatible.
+
+The Web client mounts its own generated `runtimeExplorer` Remote contribution
+when no compatible aggregate has already mounted it. This keeps existing
+Harness assemblies working while removing the need to edit
+`@deepseek-ai/dsh-api-remotes` for independent installation.
