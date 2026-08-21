@@ -31,6 +31,8 @@ test('client bundle registers itself and mounts its Remote contribution', async 
   assert.match(client, /runtimeExplorer\/snapshot/)
   assert.match(client, /ctx\.remote\.\$mount\(TYPERT_REMOTE\)/)
   assert.match(client, /ctx\.get\("remote\.runtimeExplorer"\)/)
+  assert.match(client, /inject\(\["remote\.runtimeExplorer"\]/)
+  assert.match(client, /\[data-slot=\\"sidebar\.footer\.action\\"\]\{flex-direction:column\}/)
   assert.doesNotMatch(client, /@deepseek-ai\/dsh-client-ui-runtime/)
   assert.doesNotMatch(client, /@deepseek-ai\/dsh-runtime/)
 })

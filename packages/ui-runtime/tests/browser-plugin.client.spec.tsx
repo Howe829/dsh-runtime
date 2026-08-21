@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { Context, Service } from '@deepseek-ai/cordis'
+import { Context, Service, type Fiber } from '@deepseek-ai/cordis'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup } from '@testing-library/react'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
@@ -53,17 +53,28 @@ async function bench(withRuntimeExplorer = true) {
   const ctx = new Context()
   await ctx.plugin(SlotRegistry).await()
   ctx.provide('locale', new LocaleRuntime(ctx))
+  let namespaceFiber: Fiber | undefined
+  const mountRuntimeExplorer = async () => {
+    if (ctx.get('remote.runtimeExplorer') !== undefined) return
+    namespaceFiber = ctx.plugin({
+      name: 'remote.runtimeExplorer',
+      apply: (namespaceCtx) => {
+        namespaceCtx.provide('remote.runtimeExplorer', { snapshot })
+      },
+    })
+    await namespaceFiber.await()
+  }
   class RemoteService extends Service {
     constructor(serviceCtx: Context) { super(serviceCtx, 'remote') }
 
     readonly $mount = vi.fn(async () => {
-      ctx.provide('remote.runtimeExplorer', { snapshot })
-      return async () => undefined
+      await mountRuntimeExplorer()
+      return async () => { await namespaceFiber?.dispose() }
     })
   }
   const snapshot = vi.fn().mockResolvedValue({ ok: true, value: SNAPSHOT })
   const remote = new RemoteService(ctx)
-  if (withRuntimeExplorer) ctx.provide('remote.runtimeExplorer', { snapshot })
+  if (withRuntimeExplorer) await mountRuntimeExplorer()
   return { ctx, slots: ctx.get('slots') as SlotRegistry, snapshot, remote }
 }
 
@@ -124,6 +135,12 @@ describe('ui-runtime browser plugin', () => {
       package: '@deepseek-ai/dsh-runtime',
       descriptors: [expect.objectContaining({ namespace: 'runtimeExplorer', method: 'snapshot' })],
     }))
+    await vi.waitFor(() => { expect(b.slots.entries('shell.overlay')).toHaveLength(1) })
+    const overlay = b.slots.entries('shell.overlay')[0]!
+    const face = (overlay.inject as unknown as () => RuntimeExplorerFace)()
+    face.onVisibilityChange(true)
+    await vi.waitFor(() => { expect(b.snapshot).toHaveBeenCalledOnce() })
+    await vi.waitFor(() => { expect(face.hooks.runtime.getSnapshot().data).toEqual(SNAPSHOT) })
     await b.ctx.fiber.dispose()
   })
 

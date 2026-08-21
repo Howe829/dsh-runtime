@@ -39,37 +39,39 @@ export async function apply(ctx: ClientContext): Promise<void> {
     )
   }
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-runtime: dictionaries')
-  const store = createRuntimeStore()
-  const source = createRuntimeSource(async () => {
-    const result = await ctx.remote.runtimeExplorer.snapshot()
-    if (!result.ok) {
-      throw new Error(`runtimeExplorer.snapshot failed: ${result.error.code}: ${result.error.message}`)
-    }
-    return result.value
-  }, (error) => { console.error('[dsh-runtime] reading the runtime snapshot failed:', error) })
-  const onVisibilityChange = (open: boolean): void => { source.setActive(open) }
-  const onRefresh = (): void => { source.refresh() }
-  ctx.effect(() => () => { source.dispose() }, 'ui-runtime: source lifecycle')
+  await ctx.inject(['remote.runtimeExplorer'], (runtimeCtx) => {
+    const store = createRuntimeStore()
+    const source = createRuntimeSource(async () => {
+      const result = await runtimeCtx.remote.runtimeExplorer.snapshot()
+      if (!result.ok) {
+        throw new Error(`runtimeExplorer.snapshot failed: ${result.error.code}: ${result.error.message}`)
+      }
+      return result.value
+    }, (error) => { console.error('[dsh-runtime] reading the runtime snapshot failed:', error) })
+    const onVisibilityChange = (open: boolean): void => { source.setActive(open) }
+    const onRefresh = (): void => { source.refresh() }
+    runtimeCtx.effect(() => () => { source.dispose() }, 'ui-runtime: source lifecycle')
 
-  ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
-    name: 'sidebar.footer.action',
-    id: 'dsh-runtime',
-    order: 80,
-    locale: NS,
-    store,
-    inject: (): RuntimeActionFace => ({ onVisibilityChange }),
-  }, RuntimeAction))
+    runtimeCtx.slots.inject('sidebar.footer.action', () => runtimeCtx.slots.register({
+      name: 'sidebar.footer.action',
+      id: 'dsh-runtime',
+      order: 80,
+      locale: NS,
+      store,
+      inject: (): RuntimeActionFace => ({ onVisibilityChange }),
+    }, RuntimeAction))
 
-  ctx.slots.inject('shell.overlay', () => ctx.slots.register({
-    name: 'shell.overlay',
-    id: 'dsh-runtime',
-    order: 80,
-    locale: NS,
-    store,
-    inject: (): RuntimeExplorerFace => ({
-      hooks: { runtime: source },
-      onVisibilityChange,
-      onRefresh,
-    }),
-  }, RuntimeExplorer))
+    runtimeCtx.slots.inject('shell.overlay', () => runtimeCtx.slots.register({
+      name: 'shell.overlay',
+      id: 'dsh-runtime',
+      order: 80,
+      locale: NS,
+      store,
+      inject: (): RuntimeExplorerFace => ({
+        hooks: { runtime: source },
+        onVisibilityChange,
+        onRefresh,
+      }),
+    }, RuntimeExplorer))
+  })
 }

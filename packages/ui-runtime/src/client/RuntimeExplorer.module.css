@@ -1,5 +1,11 @@
 /* dsh-runtime sidebar entry, frame overlay, graph, trace, and inspector. */
 
+/* DSH 2.0 renders footer contributions in a row by default. Stack multiple
+ * ecosystem actions (for example Plugin Market and Runtime) in the shared slot. */
+:global([data-slot='sidebar.footer.action']) {
+  flex-direction: column;
+}
+
 .sidebarAction {
   flex: none;
   display: flex;

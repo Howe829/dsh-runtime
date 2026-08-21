@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.2 - 2026-08-21
+
+- Wait for the `remote.runtimeExplorer` Cordis service before reading runtime snapshots.
+- Stack shared sidebar footer actions so Runtime does not overlap Plugin Market.
+
 ## 0.1.1 - 2026-08-21
 
 - Quote the scoped package name in the Loader overlay so Web and Desktop profiles parse it as valid YAML.
