@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context, Service, type Plugin } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
-import { provideCmdline } from '@deepseek-ai/dsh-cmdline'
 import { Session, SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
 import { remoteMethods } from '@deepseek-ai/dsh-typert-protocol'
 import RuntimeExplorerGateway, {
@@ -21,6 +20,15 @@ class AlphaService extends Service {
 
 class BetaService extends Service {
   constructor(ctx: Context) { super(ctx, 'beta') }
+}
+
+class DesktopProfilesService extends Service {
+  readonly current: Readonly<{ name: string, dir: string }>
+
+  constructor(ctx: Context, name: string) {
+    super(ctx, 'desktopProfiles')
+    this.current = Object.freeze({ name, dir: `/fixture/profiles/${name}` })
+  }
 }
 
 const provider: Plugin.Function = (ctx) => {
@@ -59,10 +67,12 @@ async function harness(
     activityTransitionLimit: 64,
   },
   profile: string | null = 'fixture-profile',
+  desktopProfile: string | null = null,
 ) {
   const ctx = new Context()
   contexts.push(ctx)
-  if (profile !== null) provideCmdline(ctx, { profile, args: [], exit: () => {} })
+  if (profile !== null) ctx.provide('launchProfile', { get: () => profile })
+  if (desktopProfile !== null) new DesktopProfilesService(ctx, desktopProfile)
   await ctx.plugin(Loader)
   ctx.loader.builtins.provider = provider
   ctx.loader.builtins.consumer = consumer
@@ -423,6 +433,16 @@ describe('RuntimeExplorerGateway', () => {
   it('reports no profile instead of guessing in an embedding host without launcher facts', async () => {
     const { runtime } = await harness(undefined, null)
     expect(runtime.snapshot().profile).toBeNull()
+  })
+
+  it('reports the active Desktop-managed profile when cmdline launcher facts are absent', async () => {
+    const { runtime } = await harness(undefined, null, 'desktop-fixture')
+    expect(runtime.snapshot().profile).toBe('desktop-fixture')
+  })
+
+  it('keeps the cmdline launch profile authoritative when both Host services exist', async () => {
+    const { runtime } = await harness(undefined, 'cli-fixture', 'desktop-fixture')
+    expect(runtime.snapshot().profile).toBe('cli-fixture')
   })
 })
 

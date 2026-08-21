@@ -259,7 +259,7 @@ export interface RuntimeExplorerSnapshot {
   readonly bootId: string
   /** Monotonic sequence allocated on the root Context for every snapshot read. */
   readonly snapshotSeq: number
-  /** Exact profile selected by the DSH launcher, or null in a non-DSH embedding host. */
+  /** Exact profile published by the CLI or Desktop Host, or null when the Host provides no profile fact. */
   readonly profile: string | null
   readonly observedAt: number
   readonly refreshIntervalMs: number

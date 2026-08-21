@@ -41,6 +41,12 @@ const DEFAULT_ACTIVITY_BUCKET_MS = 10 * 1000
 const DEFAULT_ACTIVITY_TRANSITION_LIMIT = 4096
 const RUNTIME_PROCESS_STATE = Symbol.for('@deepseek-ai/dsh-runtime/process-state')
 
+interface DesktopProfilesLike {
+  readonly current: {
+    readonly name: string
+  }
+}
+
 interface RuntimeProcessState {
   readonly bootId: string
   snapshotSeq: number
@@ -80,6 +86,14 @@ function runtimeProcessState(ctx: Context): RuntimeProcessState {
   }
   Object.defineProperty(root, RUNTIME_PROCESS_STATE, { value: created })
   return created
+}
+
+/** Resolve only profile facts explicitly published by the current Host. */
+function runtimeProfile(ctx: Context): string | null {
+  const launchProfile = ctx.get('launchProfile')?.get()
+  if (launchProfile !== undefined) return launchProfile
+  const desktopProfiles = ctx.get('desktopProfiles') as DesktopProfilesLike | undefined
+  return desktopProfiles?.current.name ?? null
 }
 
 function serviceRuntimeId(state: RuntimeProcessState, key: symbol): string {
@@ -706,7 +720,7 @@ export class RuntimeExplorerGateway extends TypertRemoteService {
       schemaVersion: RUNTIME_EXPLORER_SCHEMA_VERSION,
       bootId: processState.bootId,
       snapshotSeq: ++processState.snapshotSeq,
-      profile: this.ctx.get('launchProfile')?.get() ?? null,
+      profile: runtimeProfile(this.ctx),
       observedAt,
       refreshIntervalMs: this.resolved.refreshIntervalMs,
       overview: projectRuntimeOverview(this.ctx, processState, graph),

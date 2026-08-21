@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 import { Context, Service, type Fiber } from '@deepseek-ai/cordis'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup } from '@testing-library/react'
+import { cleanup, render } from '@testing-library/react'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-runtime/client'
-import { RuntimeAction } from '../src/client/RuntimeAction.tsx'
+import { RuntimeAction, stackFooterActions } from '../src/client/RuntimeAction.tsx'
 import { RuntimeExplorer } from '../src/client/RuntimeExplorer.tsx'
 import type { RuntimeExplorerFace } from '../src/client/faces.ts'
 import type { RuntimeActionFace } from '../src/client/faces.ts'
@@ -89,6 +89,27 @@ function declare(slots: SlotRegistry): () => void {
 }
 
 describe('ui-runtime browser plugin', () => {
+  it('turns the display-contents footer anchor into a vertical action stack', () => {
+    const view = render(
+      <div data-slot="sidebar.footer.action" style={{ display: 'contents' }}>
+        <div data-testid="plugin-market-entry" />
+        <div data-testid="runtime-entry" />
+      </div>,
+    )
+    const anchor = view.container.querySelector<HTMLElement>('[data-slot="sidebar.footer.action"]')!
+    const runtimeEntry = view.getByTestId('runtime-entry')
+    const stack = stackFooterActions(runtimeEntry)
+    const style = getComputedStyle(anchor)
+
+    expect(stack.boundary).toBe(anchor)
+    expect(style.display).toBe('flex')
+    expect(style.flexDirection).toBe('column')
+    expect(style.width).toBe('100%')
+    expect(anchor.children).toHaveLength(2)
+    stack.restore()
+    expect(anchor.style.display).toBe('contents')
+  })
+
   it('keeps the Node half as an inert plugin entrypoint', () => {
     expect(() => { applyNode() }).not.toThrow()
   })
