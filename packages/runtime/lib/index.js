@@ -75,6 +75,12 @@ function runtimeProcessState(ctx) {
 	Object.defineProperty(root, RUNTIME_PROCESS_STATE, { value: created });
 	return created;
 }
+/** Resolve only profile facts explicitly published by the current Host. */
+function runtimeProfile(ctx) {
+	const launchProfile = ctx.get("launchProfile")?.get();
+	if (launchProfile !== void 0) return launchProfile;
+	return ctx.get("desktopProfiles")?.current.name ?? null;
+}
 function serviceRuntimeId(state, key) {
 	const current = state.serviceIds.get(key);
 	if (current !== void 0) return current;
@@ -638,7 +644,7 @@ let RuntimeExplorerGateway = (() => {
 				schemaVersion: 5,
 				bootId: processState.bootId,
 				snapshotSeq: ++processState.snapshotSeq,
-				profile: this.ctx.get("launchProfile")?.get() ?? null,
+				profile: runtimeProfile(this.ctx),
 				observedAt,
 				refreshIntervalMs: this.resolved.refreshIntervalMs,
 				overview: projectRuntimeOverview(this.ctx, processState, graph),

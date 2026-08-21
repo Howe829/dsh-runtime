@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-`dsh-runtime` 探查器的只读 Host 网关。`RuntimeExplorerGateway` 注册 `runtimeExplorer` 服务，并发布直接 Remote `runtimeExplorer/snapshot`。每份快照都会携带启动器精确选择的 profile，并将当前 Cordis Loader 条目投影为插件节点，包含根 Fiber 阶段、提供与注入的服务、未满足的注入、有上限的 effect 标签，以及由服务所有关系派生的依赖边。未提供启动 profile 的非 DSH 嵌入宿主会返回 `null`；网关不会从文件或进程参数中猜测。
+`dsh-runtime` 探查器的只读 Host 网关。`RuntimeExplorerGateway` 注册 `runtimeExplorer` 服务，并发布直接 Remote `runtimeExplorer/snapshot`。每份快照都会携带 CLI 启动器或 Desktop profile 服务精确发布的 profile，并将当前 Cordis Loader 条目投影为插件节点，包含根 Fiber 阶段、提供与注入的服务、未满足的注入、有上限的 effect 标签，以及由服务所有关系派生的依赖边。两种宿主事实均不存在时返回 `null`；网关不会从文件或进程参数中猜测。
 
 网关还会观察 `session/event`，用有界环形窗口保留请求追踪所需的关联元数据。一条记录可包含事件类型、时间、序号、会话 id、turn、step、call id、工具名、结果与序列化 payload 的字符数。它不会保留或返回提示词、模型输出、工具参数或工具结果内容。Loader、Fiber 和 Session 仍是生命周期权威；本包只投影它们的实时状态。
 
