@@ -12,4 +12,4 @@ Install it into a Web profile, then restart that profile:
 dsh plugin --profile web add @howardchan/dsh-runtime
 ```
 
-The current `0.1.0` build targets the DSH `0.1.0-rc.8` package family.
+The current `0.1.1` build targets the DSH `0.1.0-rc.8` package family.

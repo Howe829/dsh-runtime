@@ -11,4 +11,4 @@
 dsh plugin --profile web add @howardchan/dsh-runtime
 ```
 
-当前 `0.1.0` 构建面向 DSH `0.1.0-rc.8` 包族。
+当前 `0.1.1` 构建面向 DSH `0.1.0-rc.8` 包族。

@@ -2,6 +2,8 @@ import { access, readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
 const root = resolve(import.meta.dirname, '..')
+const workspaceManifest = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'))
+const workspaceVersion = workspaceManifest.version
 const packages = [
   {
     dir: 'packages/runtime',
@@ -36,7 +38,9 @@ for (const item of packages) {
   const manifestText = await readFile(manifestPath, 'utf8')
   const manifest = JSON.parse(manifestText)
   if (manifest.name !== item.name) throw new Error(`${item.dir}: expected package name ${item.name}`)
-  if (manifest.version !== '0.1.0') throw new Error(`${item.dir}: expected version 0.1.0`)
+  if (manifest.version !== workspaceVersion) {
+    throw new Error(`${item.dir}: expected workspace version ${workspaceVersion}`)
+  }
   if ((manifest.private === true) !== item.private) {
     throw new Error(`${item.dir}: expected private=${String(item.private)}`)
   }

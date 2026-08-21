@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import test from 'node:test'
+import { load } from 'js-yaml'
 
 const root = resolve(import.meta.dirname, '..')
 const packageRoot = resolve(root, 'packages/dsh-runtime')
@@ -17,7 +18,9 @@ test('ships one dual-face package and one Loader row', async () => {
   assert.equal(manifest.name, '@howardchan/dsh-runtime')
   assert.equal(manifest.dsh.bundle.patch, './cordis.patch.yml')
   assert.equal(manifest.dsh.client.platform, 'web')
-  assert.deepEqual(patch.match(/name: @howardchan\/dsh-runtime/g), ['name: @howardchan/dsh-runtime'])
+  assert.deepEqual(load(patch), [{
+    insert: [{ id: 'dsh-runtime', name: '@howardchan/dsh-runtime' }],
+  }])
   assert.match(patch, /id: dsh-runtime/)
 })
 

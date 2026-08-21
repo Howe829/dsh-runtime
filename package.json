@@ -1,6 +1,6 @@
 {
   "name": "dsh-runtime-workspace",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Standalone source repository for the dsh-runtime Runtime Explorer plugin",
   "license": "MIT",
@@ -17,5 +17,8 @@
     "test": "node --test tests/independent-bundle.spec.mjs",
     "verify": "npm run assemble && node scripts/verify-repository.mjs && npm test",
     "pack:dry-run": "npm run assemble && npm pack --dry-run --cache ./artifacts/npm-cache ./packages/dsh-runtime"
+  },
+  "devDependencies": {
+    "js-yaml": "^4.1.0"
   }
 }
