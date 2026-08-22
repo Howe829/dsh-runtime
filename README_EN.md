@@ -1,8 +1,8 @@
-# dsh-runtime
+# DSH Insider
 
 [中文](README.md) | English
 
-`dsh-runtime` is a read-only Runtime Explorer for DeepSeek Harness. It ships as
+DSH Insider is a read-only Runtime Explorer for DeepSeek Harness. It ships as
 one independent, dual-face DSH plugin: the Host face projects Cordis runtime
 state and privacy-safe session-event metadata, while the Web face renders the
 graph and request trace. The overview also exposes per-plugin Effect activity
@@ -47,14 +47,23 @@ the detailed event flow for a selected turn.
 Install the public package into a Web profile, then restart that profile:
 
 ```sh
-dsh plugin --profile web add @howardchan/dsh-runtime
+dsh plugin --profile web add @howardchan/dsh-insider
 ```
 
 No Harness source edit or central Remote registry edit is required.
 
+When upgrading from `@howardchan/dsh-runtime`, remove the old package before
+installing the new one so both Bundles cannot register the gateway and UI at
+the same time. Saved graph layouts remain compatible.
+
+```sh
+dsh plugin --profile web remove @howardchan/dsh-runtime
+dsh plugin --profile web add @howardchan/dsh-insider
+```
+
 ## Packages
 
-- `packages/dsh-runtime`: the only publishable package, named `@howardchan/dsh-runtime`.
+- `packages/dsh-insider`: the only publishable package, named `@howardchan/dsh-insider`.
 - `packages/runtime`: private Host source/build unit.
 - `packages/ui-runtime`: private Web source/build unit.
 

@@ -1,6 +1,6 @@
 # DeepSeek Harness 接入
 
-`dsh-runtime` 是独立的 Profile Bundle。一个包完整持有四个接入面：Host 网关、
+“DSH 洞察”（DSH Insider）是独立的 Profile Bundle。一个包完整持有四个接入面：Host 网关、
 Web 客户端、生成的 Remote contribution 和 `cordis.patch.yml` 配置层。
 
 ## 安装
@@ -8,7 +8,7 @@ Web 客户端、生成的 Remote contribution 和 `cordis.patch.yml` 配置层�
 兼容版本发布到 npm 后执行：
 
 ```sh
-dsh plugin --profile web add @howardchan/dsh-runtime
+dsh plugin --profile web add @howardchan/dsh-insider
 ```
 
 安装后重启 Web profile。移除该包后，它的 Host 网关和 Web 界面会在下一次

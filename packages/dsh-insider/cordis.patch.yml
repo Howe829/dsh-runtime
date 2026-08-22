@@ -1,0 +1,5 @@
+# One dual-face Loader row: the default export mounts the Host gateway, while
+# dsh.client makes the same installed package discoverable by the Web client.
+- insert:
+    - id: dsh-insider
+      name: '@howardchan/dsh-insider'

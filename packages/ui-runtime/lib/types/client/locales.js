@@ -1,8 +1,8 @@
-/** Product copy for dsh-runtime. */
+/** Product copy for DSH Insider. */
 /** Simplified Chinese dictionary and key source of truth. */
 export const zh = {
-    open: '运行时',
-    title: 'DSH 运行时',
+    open: '洞察',
+    title: 'DSH 洞察',
     live: '实时',
     profile: 'Profile',
     currentProfile: '当前 Profile',
@@ -20,7 +20,7 @@ export const zh = {
     disposed: '已释放',
     failed: '失败',
     refresh: '刷新',
-    close: '关闭 DSH 运行时',
+    close: '关闭 DSH 洞察',
     closeInspector: '关闭详情',
     overviewTitle: '运行时总览',
     overviewDescription: 'DSH 进程、Cordis 插件系统与 Agent 活动的实时状态。',
@@ -178,8 +178,8 @@ export const zh = {
 };
 /** English dictionary checked against the Chinese key set. */
 export const en = {
-    open: 'Runtime',
-    title: 'DSH Runtime',
+    open: 'Insider',
+    title: 'DSH Insider',
     live: 'Live',
     profile: 'Profile',
     currentProfile: 'Current profile',
@@ -197,7 +197,7 @@ export const en = {
     disposed: 'DISPOSED',
     failed: 'FAILED',
     refresh: 'Refresh',
-    close: 'Close DSH Runtime',
+    close: 'Close DSH Insider',
     closeInspector: 'Close details',
     overviewTitle: 'Runtime Overview',
     overviewDescription: 'Live DSH process, Cordis plugin system, and Agent activity status.',

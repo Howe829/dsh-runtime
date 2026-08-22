@@ -1,4 +1,5 @@
 /** Browser-only persistence for user-arranged runtime graph positions. */
+// Keep the pre-rename key so DSH Insider restores layouts saved by dsh-runtime.
 const STORAGE_PREFIX = 'dsh-runtime:graph-layout:v1:';
 /** Stable localStorage key scoped to the active Harness profile. */
 export function graphLayoutStorageKey(profile) {

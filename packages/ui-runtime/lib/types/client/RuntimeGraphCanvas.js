@@ -141,7 +141,7 @@ function tooltipPill(text, className) {
 }
 function tooltipContent(items, t) {
     const element = document.createElement('div');
-    element.className = 'dsh-runtime-g6-tooltip';
+    element.className = 'dsh-insider-g6-tooltip';
     const item = items[0];
     if (item === undefined)
         return element;
@@ -150,18 +150,18 @@ function tooltipContent(items, t) {
         element.dataset.kind = metadata.kind;
         element.style.setProperty('--runtime-tooltip-accent', metadata.kind === 'missing' ? STATUS_COLORS.missing : '#6395ff');
         const accent = document.createElement('i');
-        accent.className = 'dsh-runtime-g6-tooltip__accent';
+        accent.className = 'dsh-insider-g6-tooltip__accent';
         accent.setAttribute('aria-hidden', 'true');
         const eyebrow = document.createElement('div');
-        eyebrow.className = 'dsh-runtime-g6-tooltip__eyebrow';
-        eyebrow.append(tooltipPill(t('edgeTypes'), 'dsh-runtime-g6-tooltip__category'));
+        eyebrow.className = 'dsh-insider-g6-tooltip__eyebrow';
+        eyebrow.append(tooltipPill(t('edgeTypes'), 'dsh-insider-g6-tooltip__category'));
         const title = document.createElement('strong');
-        title.className = 'dsh-runtime-g6-tooltip__title';
+        title.className = 'dsh-insider-g6-tooltip__title';
         title.textContent = metadata.kind === 'missing'
             ? t('edgeMissing')
             : metadata.kind === 'provides' ? t('edgeProvides') : t('edgeInjects');
         const services = document.createElement('span');
-        services.className = 'dsh-runtime-g6-tooltip__module';
+        services.className = 'dsh-insider-g6-tooltip__module';
         services.textContent = metadata.services.join(' · ');
         element.append(accent, eyebrow, title, services);
         return element;
@@ -172,16 +172,16 @@ function tooltipContent(items, t) {
     element.dataset.phase = metadata.phase;
     element.style.setProperty('--runtime-tooltip-accent', categoryColor.stroke);
     const accent = document.createElement('i');
-    accent.className = 'dsh-runtime-g6-tooltip__accent';
+    accent.className = 'dsh-insider-g6-tooltip__accent';
     accent.setAttribute('aria-hidden', 'true');
     const eyebrow = document.createElement('div');
-    eyebrow.className = 'dsh-runtime-g6-tooltip__eyebrow';
-    eyebrow.append(tooltipPill(t(NODE_CATEGORY_LOCALE_KEYS[metadata.category]), 'dsh-runtime-g6-tooltip__category'), tooltipPill(metadata.kind === 'missing-service' ? t('missingService') : t(metadata.phase), 'dsh-runtime-g6-tooltip__phase'));
+    eyebrow.className = 'dsh-insider-g6-tooltip__eyebrow';
+    eyebrow.append(tooltipPill(t(NODE_CATEGORY_LOCALE_KEYS[metadata.category]), 'dsh-insider-g6-tooltip__category'), tooltipPill(metadata.kind === 'missing-service' ? t('missingService') : t(metadata.phase), 'dsh-insider-g6-tooltip__phase'));
     const title = document.createElement('strong');
-    title.className = 'dsh-runtime-g6-tooltip__title';
+    title.className = 'dsh-insider-g6-tooltip__title';
     title.textContent = metadata.label;
     const moduleName = document.createElement('span');
-    moduleName.className = 'dsh-runtime-g6-tooltip__module';
+    moduleName.className = 'dsh-insider-g6-tooltip__module';
     moduleName.textContent = metadata.kind === 'missing-service'
         ? metadata.service ?? metadata.label
         : metadata.kind === 'service'
@@ -190,7 +190,7 @@ function tooltipContent(items, t) {
     element.append(accent, eyebrow, title, moduleName);
     if (metadata.kind === 'plugin') {
         const stats = document.createElement('dl');
-        stats.className = 'dsh-runtime-g6-tooltip__stats';
+        stats.className = 'dsh-insider-g6-tooltip__stats';
         const values = [
             ['provides', metadata.provides.length],
             ['injects', metadata.injects.length],
@@ -198,7 +198,7 @@ function tooltipContent(items, t) {
         ];
         for (const [key, value] of values) {
             const stat = document.createElement('div');
-            stat.className = 'dsh-runtime-g6-tooltip__stat';
+            stat.className = 'dsh-insider-g6-tooltip__stat';
             const count = document.createElement('dd');
             count.textContent = String(value);
             const label = document.createElement('dt');
@@ -210,10 +210,10 @@ function tooltipContent(items, t) {
     }
     else if (metadata.kind === 'service') {
         const stats = document.createElement('dl');
-        stats.className = 'dsh-runtime-g6-tooltip__stats';
+        stats.className = 'dsh-insider-g6-tooltip__stats';
         for (const [label, value] of [[t('providers'), 1], [t('consumers'), metadata.consumerCount ?? 0]]) {
             const stat = document.createElement('div');
-            stat.className = 'dsh-runtime-g6-tooltip__stat';
+            stat.className = 'dsh-insider-g6-tooltip__stat';
             const count = document.createElement('dd');
             count.textContent = String(value);
             const title = document.createElement('dt');

@@ -1,8 +1,8 @@
 node_modules/
 coverage/
 artifacts/
-packages/dsh-runtime/lib/
-packages/dsh-runtime/LICENSE
+packages/dsh-insider/lib/
+packages/dsh-insider/LICENSE
 *.tgz
 *.tsbuildinfo
 .DS_Store

@@ -1,4 +1,4 @@
-/** REAL-composition coverage: cordis.yml boots dsh-runtime through Loader + Include. */
+/** REAL-composition coverage: cordis.yml boots the DSH Insider gateway through Loader + Include. */
 
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -32,7 +32,7 @@ afterEach(async () => {
   root = undefined
 })
 
-async function loadComposition(): Promise<Context> {
+async function loadComposition(seedLegacyState = false): Promise<Context> {
   root = await mkdtemp(join(tmpdir(), 'dsh-runtime-loader-'))
   const configPath = join(root, 'cordis.yml')
   await writeFile(configPath, [
@@ -47,6 +47,21 @@ async function loadComposition(): Promise<Context> {
   ].join('\n'))
 
   context = new Context()
+  if (seedLegacyState) {
+    Object.defineProperty(context.root, Symbol.for('@howardchan/dsh-runtime/process-state'), {
+      value: {
+        bootId: 'legacy-dsh-runtime-boot',
+        snapshotSeq: 0,
+        nextRuntimeId: 0,
+        eventCount: 0,
+        turnCount: 0,
+        errorCount: 0,
+        runtimeIds: new WeakMap(),
+        nextServiceId: 0,
+        serviceIds: new Map(),
+      },
+    })
+  }
   context.baseUrl = pathToFileURL(root).href + '/'
   await context.plugin(Loader)
   context.loader.builtins.include = Include
@@ -67,7 +82,18 @@ async function loadComposition(): Promise<Context> {
   return context
 }
 
-describe('dsh-runtime real Loader composition', () => {
+describe('DSH Insider real Loader composition', () => {
+  it('adopts the legacy public process state without resetting runtime identity', async () => {
+    const ctx = await loadComposition(true)
+    const runtime = ctx.get('runtimeExplorer') as RuntimeExplorerGateway
+    expect(runtime.snapshot().bootId).toBe('legacy-dsh-runtime-boot')
+    expect((ctx.root as Context & Record<PropertyKey, unknown>)[
+      Symbol.for('@deepseek-ai/dsh-runtime/process-state')
+    ]).toBe((ctx.root as Context & Record<PropertyKey, unknown>)[
+      Symbol.for('@howardchan/dsh-runtime/process-state')
+    ])
+  })
+
   it('serves the assembled dependency edge, captures a real bus event, and removes capture on unload', async () => {
     const ctx = await loadComposition()
     const unloaded = [...ctx.loader.entries()]
@@ -85,6 +111,13 @@ describe('dsh-runtime real Loader composition', () => {
       limits: { transitionLimit: 4096, traceEventLimit: 4 },
     })
     expect(first.refreshIntervalMs).toBe(750)
+    const rootState = (ctx.root as Context & Record<PropertyKey, unknown>)[
+      Symbol.for('@deepseek-ai/dsh-runtime/process-state')
+    ]
+    const legacyPublicState = (ctx.root as Context & Record<PropertyKey, unknown>)[
+      Symbol.for('@howardchan/dsh-runtime/process-state')
+    ]
+    expect(legacyPublicState).toBe(rootState)
     expect(first.graph.nodes.map(node => node.moduleName)).toEqual(expect.arrayContaining([PROVIDER, CONSUMER, RUNTIME]))
     expect(first.graph.edges.some(edge => edge.services.includes('loaderDependency'))).toBe(true)
 

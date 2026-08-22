@@ -18,8 +18,8 @@ const packages = [
     private: true,
   },
   {
-    dir: 'packages/dsh-runtime',
-    name: '@howardchan/dsh-runtime',
+    dir: 'packages/dsh-insider',
+    name: '@howardchan/dsh-insider',
     required: [
       'cordis.patch.yml',
       'lib/index.js',
@@ -48,15 +48,15 @@ for (const item of packages) {
   for (const file of item.required) await access(resolve(root, item.dir, file))
 }
 
-const publicManifest = JSON.parse(await readFile(resolve(root, 'packages/dsh-runtime/package.json'), 'utf8'))
+const publicManifest = JSON.parse(await readFile(resolve(root, 'packages/dsh-insider/package.json'), 'utf8'))
 if (publicManifest.dsh?.bundle?.patch !== './cordis.patch.yml') {
-  throw new Error('packages/dsh-runtime: missing dsh.bundle patch declaration')
+  throw new Error('packages/dsh-insider: missing dsh.bundle patch declaration')
 }
 if (publicManifest.dsh?.client?.platform !== 'web') {
-  throw new Error('packages/dsh-runtime: missing Web dsh.client declaration')
+  throw new Error('packages/dsh-insider: missing Web dsh.client declaration')
 }
 
 await access(resolve(root, 'integration/README.md'))
 await access(resolve(root, 'integration/README.zh.md'))
 await access(resolve(root, 'integration/cordis.patch.fragment.yml'))
-console.log('dsh-runtime repository verification passed')
+console.log('dsh-insider repository verification passed')

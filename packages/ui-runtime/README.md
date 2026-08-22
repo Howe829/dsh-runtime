@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Browser surface for `dsh-runtime`. The Client Cordis plugin registers one `sidebar.footer` action and one `shell.overlay`. Opening the action reveals a full-height explorer beside the current sidebar; closing it returns to the existing DSH surface without adding a floating assistant button or replacing the session UI. The header shows the exact current profile supplied by the Host snapshot.
+Browser surface for `dsh-insider`. The Client Cordis plugin registers one `sidebar.footer` action and one `shell.overlay`. Opening the action reveals a full-height explorer beside the current sidebar; closing it returns to the existing DSH surface without adding a floating assistant button or replacing the session UI. The header shows the exact current profile supplied by the Host snapshot.
 
 The Runtime Graph tab renders the Host snapshot as a deterministic provider-to-consumer dependency graph. Its overview cards and filter use four stable product-facing states: PENDING, ACTIVE, DISPOSED, and FAILED. Detailed Loader phases collapse into those states, while bounded zoom controls scale the canvas and reset its viewport. Dragging blank canvas pans the complete graph without stealing node clicks; the focused viewport also retains native keyboard scrolling. Search covers plugin labels, module names, Loader ids, provided services, and injected services. Selecting a node focuses the canvas on its complete upstream and downstream dependency chain and opens a metadata inspector; closing the inspector restores the complete graph.
 

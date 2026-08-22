@@ -1,4 +1,4 @@
-/** Sidebar footer action that opens dsh-runtime without adding a floating button. */
+/** Sidebar footer action that opens DSH Insider without adding a floating button. */
 
 import { useLayoutEffect, useRef } from 'react'
 import clsx from 'clsx'

@@ -1,5 +1,5 @@
 # One dual-face Loader row. The package's default export mounts the Host
 # gateway; its dsh.client declaration exposes the Web Runtime Explorer.
 - insert:
-    - id: dsh-runtime
-      name: @howardchan/dsh-runtime
+    - id: dsh-insider
+      name: @howardchan/dsh-insider

@@ -1,3 +1,3 @@
-/** Node half intentionally empty; dsh-runtime renders only in the browser. */
+/** Node half intentionally empty; DSH Insider renders only in the browser. */
 export function apply() { }
 //# sourceMappingURL=index.js.map

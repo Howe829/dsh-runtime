@@ -123,9 +123,9 @@ describe('ui-runtime browser plugin', () => {
 
     const action = b.slots.entries('sidebar.footer.action')[0]!
     const overlay = b.slots.entries('shell.overlay')[0]!
-    expect(action.options).toMatchObject({ id: 'dsh-runtime', order: 80 })
+    expect(action.options).toMatchObject({ id: 'dsh-insider', order: 80 })
     expect(action.component).toBe(RuntimeAction)
-    expect(overlay.options).toMatchObject({ id: 'dsh-runtime', order: 80 })
+    expect(overlay.options).toMatchObject({ id: 'dsh-insider', order: 80 })
     expect(overlay.component).toBe(RuntimeExplorer)
     expect(b.snapshot).not.toHaveBeenCalled()
 
