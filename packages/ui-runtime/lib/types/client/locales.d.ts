@@ -1,4 +1,4 @@
-/** Product copy for dsh-runtime. */
+/** Product copy for DSH Insider. */
 /** Simplified Chinese dictionary and key source of truth. */
 export declare const zh: {
     open: string;
@@ -176,7 +176,7 @@ export declare const zh: {
     laneTool: string;
     laneSession: string;
 };
-/** dsh-runtime locale key union. */
+/** DSH Insider locale key union. */
 export type RuntimeLocaleKey = keyof typeof zh;
 /** English dictionary checked against the Chinese key set. */
 export declare const en: {

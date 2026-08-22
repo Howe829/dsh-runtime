@@ -1,12 +1,12 @@
-# dsh-runtime Product and Engineering Specification
+# DSH Insider Product and Engineering Specification
 
 Status: Draft v0.3
-Audience: dsh-runtime maintainers, DeepSeek Harness contributors, and reviewers  
-Primary product: an Obsidian-style live network graph of DSH plugins  
+Audience: DSH Insider maintainers, DeepSeek Harness contributors, and reviewers
+Primary product: an Obsidian-style live network graph of DSH plugins
 
 ## 1. Product definition
 
-`dsh-runtime` is a read-only Runtime Explorer for DeepSeek Harness.
+DSH Insider is a read-only Runtime Explorer for DeepSeek Harness.
 
 Its primary surface is a live network graph that answers:
 

@@ -6,7 +6,7 @@ import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-test-runtime'
 import type { RuntimeExplorerSnapshot } from '@deepseek-ai/dsh-api-remotes/client'
 import { RuntimeAction, type RuntimeActionProps } from '../src/client/RuntimeAction.tsx'
 import { RuntimeExplorer, type RuntimeExplorerProps } from '../src/client/RuntimeExplorer.tsx'
-import { en, type RuntimeLocaleKey } from '../src/client/locales.ts'
+import { en, zh, type RuntimeLocaleKey } from '../src/client/locales.ts'
 import { createRuntimeStore } from '../src/client/store.ts'
 import type { RuntimeSourceSnapshot } from '../src/client/source.ts'
 
@@ -272,6 +272,11 @@ function explorer(snapshot: RuntimeSourceSnapshot = { data: DATA, loading: false
 }
 
 describe('RuntimeAction', () => {
+  it('uses the finalized DSH Insider and DSH 洞察 brand copy', () => {
+    expect(en).toMatchObject({ open: 'Insider', title: 'DSH Insider', close: 'Close DSH Insider' })
+    expect(zh).toMatchObject({ open: '洞察', title: 'DSH 洞察', close: '关闭 DSH 洞察' })
+  })
+
   it('opens and closes the shared overlay state from the sidebar row and measures the sidebar edge', () => {
     const store = createRuntimeStore().create()
     const onVisibilityChange = vi.fn()
@@ -726,9 +731,9 @@ describe('RuntimeExplorer', () => {
     expect(screen.getByLabelText(en.edgeTypes).textContent).toContain(en.edgeMissing)
     const tooltip = (options.plugins as Array<Record<string, any>>).find(item => item.key === 'runtime-tooltip')!
     const tooltipCard = tooltip.getContent({}, [graph.data.nodes[0]]) as HTMLElement
-    expect(tooltipCard.className).toBe('dsh-runtime-g6-tooltip')
+    expect(tooltipCard.className).toBe('dsh-insider-g6-tooltip')
     expect(tooltipCard.textContent).toContain(`${en.categoryExtension}${en.active}provider@fixture/provider`)
-    expect([...tooltipCard.querySelectorAll('.dsh-runtime-g6-tooltip__stat')].map(item => item.textContent)).toEqual([
+    expect([...tooltipCard.querySelectorAll('.dsh-insider-g6-tooltip__stat')].map(item => item.textContent)).toEqual([
       `1${en.provides}`, `0${en.injects}`, `0${en.missing}`,
     ])
     expect(tooltip.style['.tooltip']).toMatchObject({ padding: 0, backgroundColor: 'transparent', boxShadow: 'none' })

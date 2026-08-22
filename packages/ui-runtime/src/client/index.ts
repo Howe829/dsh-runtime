@@ -1,4 +1,4 @@
-/** dsh-runtime sidebar entry and frame overlay assembly. */
+/** DSH Insider sidebar entry and frame overlay assembly. */
 
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
@@ -20,7 +20,7 @@ export { createRuntimeStore } from './store.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
-    /** dsh-runtime graph and request trace copy. */
+    /** DSH Insider graph and request trace copy. */
     runtime: RuntimeLocaleKey
   }
 }
@@ -30,7 +30,7 @@ const NS = 'runtime'
 /** Services required by the Remote source and both slot contributions. */
 export const inject = ['slots', 'locale', 'remote']
 
-/** Mount dsh-runtime as one sidebar action and one frame overlay. */
+/** Mount DSH Insider as one sidebar action and one frame overlay. */
 export async function apply(ctx: ClientContext): Promise<void> {
   if (ctx.get('remote.runtimeExplorer') === undefined) {
     await ctx.effect(
@@ -47,14 +47,14 @@ export async function apply(ctx: ClientContext): Promise<void> {
         throw new Error(`runtimeExplorer.snapshot failed: ${result.error.code}: ${result.error.message}`)
       }
       return result.value
-    }, (error) => { console.error('[dsh-runtime] reading the runtime snapshot failed:', error) })
+    }, (error) => { console.error('[dsh-insider] reading the runtime snapshot failed:', error) })
     const onVisibilityChange = (open: boolean): void => { source.setActive(open) }
     const onRefresh = (): void => { source.refresh() }
     runtimeCtx.effect(() => () => { source.dispose() }, 'ui-runtime: source lifecycle')
 
     runtimeCtx.slots.inject('sidebar.footer.action', () => runtimeCtx.slots.register({
       name: 'sidebar.footer.action',
-      id: 'dsh-runtime',
+      id: 'dsh-insider',
       order: 80,
       locale: NS,
       store,
@@ -63,7 +63,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
 
     runtimeCtx.slots.inject('shell.overlay', () => runtimeCtx.slots.register({
       name: 'shell.overlay',
-      id: 'dsh-runtime',
+      id: 'dsh-insider',
       order: 80,
       locale: NS,
       store,

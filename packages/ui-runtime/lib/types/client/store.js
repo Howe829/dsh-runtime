@@ -1,7 +1,7 @@
 /** Shared viewing state for the sidebar action and frame overlay. */
 import { defineStore } from '@deepseek-ai/dsh-client-runtime/client';
 /**
- * Create the root-scoped store shared by both dsh-runtime slot entries.
+ * Create the root-scoped store shared by both DSH Insider slot entries.
  * @returns A store handle whose action and overlay adapters share one state instance.
  */
 export function createRuntimeStore() {

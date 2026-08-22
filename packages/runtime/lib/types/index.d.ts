@@ -38,7 +38,7 @@ export declare function projectRuntimeGraph(ctx: Context, effectLimit: number): 
  * @returns A trace row that contains no prompt, model output, tool arguments, or tool result content.
  */
 export declare function projectTraceEvent(session: Session, event: SessionEvent): RuntimeTraceEvent;
-/** Remote gateway backing the dsh-runtime browser plugin. */
+/** Remote gateway backing the DSH Insider browser plugin. */
 export declare class RuntimeExplorerGateway extends TypertRemoteService {
     static inject: string[];
     static Config: z<Config>;

@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Read-only Host gateway for the `dsh-runtime` explorer. `RuntimeExplorerGateway` registers the `runtimeExplorer` service and publishes the direct Remote `runtimeExplorer/snapshot`. Each snapshot carries the exact profile published by the CLI launcher or Desktop profile service and projects the current Cordis Loader entries into plugin nodes, their root Fiber phases, the services they provide and inject, unresolved injections, bounded effect labels, and service-derived dependency edges. A Host that provides neither fact reports `null`; the gateway never guesses one from files or process arguments.
+Read-only Host gateway for DSH Insider. `RuntimeExplorerGateway` registers the `runtimeExplorer` service and publishes the direct Remote `runtimeExplorer/snapshot`. Each snapshot carries the exact profile published by the CLI launcher or Desktop profile service and projects the current Cordis Loader entries into plugin nodes, their root Fiber phases, the services they provide and inject, unresolved injections, bounded effect labels, and service-derived dependency edges. A Host that provides neither fact reports `null`; the gateway never guesses one from files or process arguments.
 
 The gateway also observes `session/event` and retains a bounded ring of correlation metadata for the request trace. A row can contain the event type, time, sequence, session id, turn, step, call id, tool name, outcome, and serialized payload character count. It never retains or returns prompt text, model output, tool arguments, or tool result content. Loader, Fiber, and Session remain the lifecycle authorities; this package only projects their live state.
 

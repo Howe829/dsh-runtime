@@ -1,6 +1,6 @@
-/** Client-safe snapshot vocabulary for dsh-runtime. @module @deepseek-ai/dsh-runtime/types */
+/** Client-safe snapshot vocabulary for DSH Insider. @module @deepseek-ai/dsh-runtime/types */
 
-/** Current normalized snapshot contract emitted by dsh-runtime. */
+/** Current normalized snapshot contract emitted by DSH Insider. */
 export const RUNTIME_EXPLORER_SCHEMA_VERSION = 5
 
 /** Four product-facing lifecycle states shared by overview summaries and filters. */

@@ -632,26 +632,32 @@ export function RuntimeExplorer({
     <section className={css.surface} style={{ left: state.sidebarOffset }} aria-label={t('title')}>
       <header className={css.header}>
         <div className={css.brandIcon}><IconBranchOutline16 size={20} /></div>
-        <div className={css.heading}><h1>{t('title')}</h1></div>
-        <span className={css.liveBadge}><i aria-hidden />{t('live')}</span>
-        <span
-          className={css.profileBadge}
-          aria-label={`${t('currentProfile')}: ${data?.profile ?? t('unavailable')}`}
-        >
-          <span>{t('profile')}</span>
-          <code>{data?.profile ?? '—'}</code>
-        </span>
-        <span className={css.updated}>{t('updated')}</span>
-        <Tooltip label={t('refresh')} side="bottom" delayMs={400}>
-          <button type="button" className={css.iconButton} aria-label={t('refresh')} onClick={onRefresh}>
-            <IconRefreshOutline16 size={16} />
-          </button>
-        </Tooltip>
-        <Tooltip label={t('close')} side="bottom" delayMs={400}>
-          <button type="button" className={css.iconButton} aria-label={t('close')} onClick={close}>
-            <IconCloseOutline16 size={16} />
-          </button>
-        </Tooltip>
+        <div className={css.heading}>
+          <div className={css.titleRow}>
+            <h1>{t('title')}</h1>
+            <span className={css.liveBadge}><i aria-hidden />{t('live')}</span>
+          </div>
+          <span
+            className={css.profileBadge}
+            aria-label={`${t('currentProfile')}: ${data?.profile ?? t('unavailable')}`}
+          >
+            <span>{t('profile')}</span>
+            <code>{data?.profile ?? '—'}</code>
+          </span>
+        </div>
+        <div className={css.headerActions}>
+          <span className={css.updated}>{t('updated')}</span>
+          <Tooltip label={t('refresh')} side="bottom" delayMs={400}>
+            <button type="button" className={css.iconButton} aria-label={t('refresh')} onClick={onRefresh}>
+              <IconRefreshOutline16 size={16} />
+            </button>
+          </Tooltip>
+          <Tooltip label={t('close')} side="bottom" delayMs={400}>
+            <button type="button" className={css.iconButton} aria-label={t('close')} onClick={close}>
+              <IconCloseOutline16 size={16} />
+            </button>
+          </Tooltip>
+        </div>
       </header>
       <div className={css.toolbar}>
         <div className={css.tabs}>

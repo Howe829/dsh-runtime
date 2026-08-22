@@ -1,5 +1,5 @@
-/** Client-safe snapshot vocabulary for dsh-runtime. @module @deepseek-ai/dsh-runtime/types */
-/** Current normalized snapshot contract emitted by dsh-runtime. */
+/** Client-safe snapshot vocabulary for DSH Insider. @module @deepseek-ai/dsh-runtime/types */
+/** Current normalized snapshot contract emitted by DSH Insider. */
 export declare const RUNTIME_EXPLORER_SCHEMA_VERSION = 5;
 /** Four product-facing lifecycle states shared by overview summaries and filters. */
 export type RuntimeOverviewStatus = 'pending' | 'active' | 'disposed' | 'failed';
@@ -222,7 +222,7 @@ export interface RuntimeExplorerSnapshot {
     readonly bootId: string;
     /** Monotonic sequence allocated on the root Context for every snapshot read. */
     readonly snapshotSeq: number;
-    /** Exact profile selected by the DSH launcher, or null in a non-DSH embedding host. */
+    /** Exact profile published by the CLI or Desktop Host, or null when the Host provides no profile fact. */
     readonly profile: string | null;
     readonly observedAt: number;
     readonly refreshIntervalMs: number;

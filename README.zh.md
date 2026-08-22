@@ -1,6 +1,6 @@
-# dsh-runtime
+# DSH 洞察
 
-`dsh-runtime` 是 DeepSeek Harness 的只读 Runtime Explorer，以一个独立的
+“DSH 洞察”（DSH Insider）是 DeepSeek Harness 的只读 Runtime Explorer，以一个独立的
 双端 DSH 插件发布：Host 端负责投影 Cordis 运行时状态和隐私安全的 Session
 事件元数据，Web 端负责渲染关系图谱与请求追踪。总览还会按插件显示 Effect
 的当前数量、净变化、生命周期活跃度、趋势和有界的最近转换记录。
@@ -39,7 +39,7 @@ Plugins、Fibers 和 Services 分布卡片会按状态与插件类型解释同�
 
 ## 包结构
 
-- `packages/dsh-runtime`：唯一可发布的 npm 包，包名为 `@howardchan/dsh-runtime`。
+- `packages/dsh-insider`：唯一可发布的 npm 包，包名为 `@howardchan/dsh-insider`。
 - `packages/runtime`：私有 Host 源码与构建单元。
 - `packages/ui-runtime`：私有 Web 源码与构建单元。
 
@@ -47,10 +47,18 @@ Plugins、Fibers 和 Services 分布卡片会按状态与插件类型解释同�
 patch。用户只需将它安装到 Web profile：
 
 ```sh
-dsh plugin --profile web add @howardchan/dsh-runtime
+dsh plugin --profile web add @howardchan/dsh-insider
 ```
 
 整个接入不需要修改 Harness 源码，也不需要改中央 Remote 注册表。
+
+从 `@howardchan/dsh-runtime` 升级时，先移除旧包再安装新包，避免两个 Bundle
+同时注册网关和界面。旧版保存的图谱布局会继续复用。
+
+```sh
+dsh plugin --profile web remove @howardchan/dsh-runtime
+dsh plugin --profile web add @howardchan/dsh-insider
+```
 
 ## 当前开发基线
 

@@ -3,6 +3,7 @@
 import type { RuntimeGraphNode } from '@deepseek-ai/dsh-api-remotes/client'
 import type { RuntimeGraphNeighbourDepth, RuntimeGraphSavedPositions } from './graph.ts'
 
+// Keep the pre-rename key so DSH Insider restores layouts saved by dsh-runtime.
 const STORAGE_PREFIX = 'dsh-runtime:graph-layout:v1:'
 
 interface StoredGraphLayout {

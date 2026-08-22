@@ -1,8 +1,8 @@
 {
-  "name": "dsh-runtime-workspace",
+  "name": "dsh-insider-workspace",
   "version": "0.1.3",
   "private": true,
-  "description": "Standalone source repository for the dsh-runtime Runtime Explorer plugin",
+  "description": "Standalone source repository for the DSH Insider Runtime Explorer plugin",
   "license": "MIT",
   "type": "module",
   "packageManager": "pnpm@11.7.0",
@@ -16,7 +16,7 @@
     "assemble": "node scripts/assemble-package.mjs",
     "test": "node --test tests/independent-bundle.spec.mjs",
     "verify": "npm run assemble && node scripts/verify-repository.mjs && npm test",
-    "pack:dry-run": "npm run assemble && npm pack --dry-run --cache ./artifacts/npm-cache ./packages/dsh-runtime"
+    "pack:dry-run": "npm run assemble && npm pack --dry-run --cache ./artifacts/npm-cache ./packages/dsh-insider"
   },
   "devDependencies": {
     "js-yaml": "^4.1.0"

@@ -37,7 +37,7 @@ type RuntimeStoreActions = {
 }
 
 /**
- * Create the root-scoped store shared by both dsh-runtime slot entries.
+ * Create the root-scoped store shared by both DSH Insider slot entries.
  * @returns A store handle whose action and overlay adapters share one state instance.
  */
 export function createRuntimeStore(): EngineStoreHandle<RuntimeStoreState, RuntimeStoreActions> {

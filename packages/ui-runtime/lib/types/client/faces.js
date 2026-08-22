@@ -1,3 +1,3 @@
-/** Injected Remote faces for the two dsh-runtime slot entries. */
+/** Injected Remote faces for the two DSH Insider slot entries. */
 export {};
 //# sourceMappingURL=faces.js.map

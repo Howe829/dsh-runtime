@@ -1,4 +1,4 @@
-# dsh-runtime Runtime Overview design QA
+# DSH Insider Runtime Overview design QA
 
 ## Comparison setup
 

@@ -44,6 +44,7 @@ const DEFAULT_ACTIVITY_WINDOW_MS = 5 * 60 * 1000;
 const DEFAULT_ACTIVITY_BUCKET_MS = 10 * 1000;
 const DEFAULT_ACTIVITY_TRANSITION_LIMIT = 4096;
 const RUNTIME_PROCESS_STATE = Symbol.for('@deepseek-ai/dsh-runtime/process-state');
+const LEGACY_PUBLIC_RUNTIME_PROCESS_STATE = Symbol.for('@howardchan/dsh-runtime/process-state');
 const CAPABILITIES = {
     fiberInstances: false,
     ownershipEdges: false,
@@ -55,9 +56,16 @@ const CAPABILITIES = {
 };
 function runtimeProcessState(ctx) {
     const root = ctx.root;
-    const current = root[RUNTIME_PROCESS_STATE];
-    if (current !== undefined)
+    const current = root[RUNTIME_PROCESS_STATE] ?? root[LEGACY_PUBLIC_RUNTIME_PROCESS_STATE];
+    if (current !== undefined) {
+        if (root[RUNTIME_PROCESS_STATE] === undefined) {
+            Object.defineProperty(root, RUNTIME_PROCESS_STATE, { value: current });
+        }
+        if (root[LEGACY_PUBLIC_RUNTIME_PROCESS_STATE] === undefined) {
+            Object.defineProperty(root, LEGACY_PUBLIC_RUNTIME_PROCESS_STATE, { value: current });
+        }
         return current;
+    }
     const created = {
         bootId: randomUUID(),
         snapshotSeq: 0,
@@ -70,7 +78,18 @@ function runtimeProcessState(ctx) {
         serviceIds: new Map(),
     };
     Object.defineProperty(root, RUNTIME_PROCESS_STATE, { value: created });
+    if (root[LEGACY_PUBLIC_RUNTIME_PROCESS_STATE] === undefined) {
+        Object.defineProperty(root, LEGACY_PUBLIC_RUNTIME_PROCESS_STATE, { value: created });
+    }
     return created;
+}
+/** Resolve only profile facts explicitly published by the current Host. */
+function runtimeProfile(ctx) {
+    const launchProfile = ctx.get('launchProfile')?.get();
+    if (launchProfile !== undefined)
+        return launchProfile;
+    const desktopProfiles = ctx.get('desktopProfiles');
+    return desktopProfiles?.current.name ?? null;
 }
 function serviceRuntimeId(state, key) {
     const current = state.serviceIds.get(key);
@@ -529,7 +548,7 @@ export function projectTraceEvent(session, event) {
             return common;
     }
 }
-/** Remote gateway backing the dsh-runtime browser plugin. */
+/** Remote gateway backing the DSH Insider browser plugin. */
 let RuntimeExplorerGateway = (() => {
     let _classSuper = TypertRemoteService;
     let _instanceExtraInitializers = [];
@@ -644,7 +663,7 @@ let RuntimeExplorerGateway = (() => {
                 schemaVersion: RUNTIME_EXPLORER_SCHEMA_VERSION,
                 bootId: processState.bootId,
                 snapshotSeq: ++processState.snapshotSeq,
-                profile: this.ctx.get('launchProfile')?.get() ?? null,
+                profile: runtimeProfile(this.ctx),
                 observedAt,
                 refreshIntervalMs: this.resolved.refreshIntervalMs,
                 overview: projectRuntimeOverview(this.ctx, processState, graph),

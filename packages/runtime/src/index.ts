@@ -40,6 +40,7 @@ const DEFAULT_ACTIVITY_WINDOW_MS = 5 * 60 * 1000
 const DEFAULT_ACTIVITY_BUCKET_MS = 10 * 1000
 const DEFAULT_ACTIVITY_TRANSITION_LIMIT = 4096
 const RUNTIME_PROCESS_STATE = Symbol.for('@deepseek-ai/dsh-runtime/process-state')
+const LEGACY_PUBLIC_RUNTIME_PROCESS_STATE = Symbol.for('@howardchan/dsh-runtime/process-state')
 
 interface DesktopProfilesLike {
   readonly current: {
@@ -71,8 +72,16 @@ const CAPABILITIES: RuntimeExplorerCapabilities = {
 
 function runtimeProcessState(ctx: Context): RuntimeProcessState {
   const root = ctx.root as Context & Record<PropertyKey, unknown>
-  const current = root[RUNTIME_PROCESS_STATE]
-  if (current !== undefined) return current as RuntimeProcessState
+  const current = root[RUNTIME_PROCESS_STATE] ?? root[LEGACY_PUBLIC_RUNTIME_PROCESS_STATE]
+  if (current !== undefined) {
+    if (root[RUNTIME_PROCESS_STATE] === undefined) {
+      Object.defineProperty(root, RUNTIME_PROCESS_STATE, { value: current })
+    }
+    if (root[LEGACY_PUBLIC_RUNTIME_PROCESS_STATE] === undefined) {
+      Object.defineProperty(root, LEGACY_PUBLIC_RUNTIME_PROCESS_STATE, { value: current })
+    }
+    return current as RuntimeProcessState
+  }
   const created: RuntimeProcessState = {
     bootId: randomUUID(),
     snapshotSeq: 0,
@@ -85,6 +94,9 @@ function runtimeProcessState(ctx: Context): RuntimeProcessState {
     serviceIds: new Map(),
   }
   Object.defineProperty(root, RUNTIME_PROCESS_STATE, { value: created })
+  if (root[LEGACY_PUBLIC_RUNTIME_PROCESS_STATE] === undefined) {
+    Object.defineProperty(root, LEGACY_PUBLIC_RUNTIME_PROCESS_STATE, { value: created })
+  }
   return created
 }
 
@@ -615,7 +627,7 @@ export function projectTraceEvent(session: Session, event: SessionEvent): Runtim
   }
 }
 
-/** Remote gateway backing the dsh-runtime browser plugin. */
+/** Remote gateway backing the DSH Insider browser plugin. */
 export class RuntimeExplorerGateway extends TypertRemoteService {
   static inject = ['loader']
 

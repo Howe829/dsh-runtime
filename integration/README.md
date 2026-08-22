@@ -1,6 +1,6 @@
 # DeepSeek Harness integration
 
-`dsh-runtime` is an independent Profile Bundle. The package owns all four
+DSH Insider is an independent Profile Bundle. The package owns all four
 integration surfaces: the Host gateway, Web client, generated Remote
 contribution, and `cordis.patch.yml` layer.
 
@@ -9,7 +9,7 @@ contribution, and `cordis.patch.yml` layer.
 After a compatible release is available on npm:
 
 ```sh
-dsh plugin --profile web add @howardchan/dsh-runtime
+dsh plugin --profile web add @howardchan/dsh-insider
 ```
 
 Restart the Web profile after installation. Removing the package withdraws its

@@ -1,4 +1,4 @@
-/** Injected Remote faces for the two dsh-runtime slot entries. */
+/** Injected Remote faces for the two DSH Insider slot entries. */
 
 import type { RuntimeSource } from './source.ts'
 
